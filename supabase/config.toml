@@ -1,0 +1,26 @@
+project_id = "dmfdovwiczhpnqlykjix"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://*.lovable.app"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = false
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "0s"
+
+[auth.rate_limit]
+anonymous_users = 0
+authenticated = 0
+otp = 0
+token_refresh = 0
+sign_in_sign_ups = 0
+webhook = 0
+mfa_verification = 0
+reauthentication = 0

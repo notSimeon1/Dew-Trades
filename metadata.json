@@ -1,0 +1,8 @@
+{
+  "name": "Dew Trades",
+  "description": "Dew Trades — Institutional Prime Brokerage & Multi-Asset Execution Platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,30 @@
+Please implement a complete, end-to-end interactive 'Buy Bitcoin' checkout and deposit wizard matching the exact dark-themed visual style of Frobex (charcoal slate gray background, white text, and gold-gradient highlights). 
+
+The flow must consist of 3 distinct, seamless stages:
+
+Stage 1: Gateway Selection
+* Display a 3-step wizard header (Select gateway -> Generate -> Pay & upload) with step 1 active.
+* Present a clean grid of selectable payment method cards showing only the names of the methods: Cash App, PayPal, Zelle, Chime, Apple Pay, Venmo, and Bank Wire.
+* Include the helper instruction: 'Select a payment method to view details and complete your purchase.'
+
+Stage 2: Secure Gateway Generation
+* When a user clicks any payment method card, seamlessly transition to a loading screen.
+* Display the central circular Bitcoin logo with a blue and yellow gradient.
+* Show the main heading: 'Generating secure payment gateway...'
+* Show the subheading: 'Encrypting your session and preparing verified merchants.'
+* Include an animated, glowing horizontal progress line.
+* After a simulated 3-second delay, automatically transition to Stage 3.
+
+Stage 3: Payment Details & Proof Upload
+* Display the 3-step wizard with steps 1 and 2 completed and step 3 ('Pay & upload') active.
+* Render a prominent dark gray container card with a subtle gold border featuring:
+  * A top-left amount header: 'Send exactly $1296295.33' in gold.
+  * A top-right countdown timer badge: 'Expires in 01:59:41' in red.
+  * Specific payment instruction details (e.g., Account Name: Frobex Treasury, Account Number/Identifier: deposits@frobex.io or handle) with interactive copy buttons for each row.
+  * A helpful memo note below the instructions.
+* Render a second container card for 'Payment receipt *' featuring:
+  * The text instruction: 'Upload a screenshot of your payment. Required before submission — admin will verify and credit your wallet.'
+  * A file upload button / drag-and-drop zone labeled 'Choose File No file chosen'.
+* At the bottom of the screen, place a 'Back' button on the left and a prominent gold 'Submit deposit request' button on the right.
+
+Ensure clean state management, smooth transitions between all steps, and consistent branding throughout.

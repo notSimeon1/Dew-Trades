@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS on_auth_user_created_owner_admin ON auth.users;
