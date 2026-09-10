@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import type { ToolContext } from "@lovable.dev/mcp-js";
 
-const DEFAULT_URL = "https://dmfdovwiczhpnqlykjix.supabase.co";
+const DEFAULT_URL = "https://wbdfjruovvolsmzpihqc.supabase.co";
 const DEFAULT_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZmRvdndpY3pocG5xbHlraml4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MzA1OTMsImV4cCI6MjEwMTEwNjU5M30.Hho5fwB9yPk_cCTAAfN9wD_yxGZIMkPagArg_RuQFXE";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZGZqcnVvdnZvbHNtenBpaHFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc4ODIxOCwiZXhwIjoyMTA0MzY0MjE4fQ.Z8GUd0OkLSdWpilr2vbdlOeVDNDgfPe0wKBrtm4rujY";
 
 export function getMcpDbClient(ctx: ToolContext) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_URL;

@@ -355,19 +355,9 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Right Section: Currency, Audio, Balance, Deposit, Profile */}
+          {/* Right Section: Currency, Audio, Balance, Profile */}
           {user ? (
             <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {/* Deposit Action Pill */}
-              <Button
-                size="sm"
-                onClick={() => navigate({ to: "/deposit" })}
-                className="hidden md:inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 text-black font-bold hover:brightness-110 shadow-[0_0_20px_rgba(245,158,11,0.25)] text-xs h-8 px-3.5 transition-all"
-              >
-                <ArrowDownToLine className="h-3.5 w-3.5 text-black stroke-[2.5]" />
-                Deposit
-              </Button>
-
               {/* Currency Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

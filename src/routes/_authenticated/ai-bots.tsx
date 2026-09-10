@@ -1,8 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { activateBotServerFn } from "@/lib/bot.functions";
+import {
+  activateBotServerFn,
+  harvestBotProfitServerFn,
+  terminateBotServerFn,
+} from "@/lib/bot.functions";
+import { calculateBotProfitByTime } from "@/lib/profit-timing";
+import { soundFX } from "@/lib/sound-engine";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
@@ -114,37 +120,10 @@ function AiBotsPage() {
       {activeBots && activeBots.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" /> Your Active Bots
+            <Zap className="h-4 w-4 text-primary" /> Your Active Bots ({activeBots.length})
           </h2>
           {activeBots.map((ab: any) => (
-            <Card key={ab.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{ab.trading_bots?.name ?? "Bot"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Invested: ${Number(ab.invested_amount).toFixed(2)} · Expires:{" "}
-                    {new Date(ab.expiration_date).toLocaleDateString()}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-success tabular-nums">
-                      +${Number(ab.current_profit).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Current profit</div>
-                  </div>
-                  <Badge
-                    className={
-                      ab.status === "running"
-                        ? "bg-success/20 text-success border-success/40"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {ab.status}
-                  </Badge>
-                </div>
-              </div>
-            </Card>
+            <ActiveBotItem key={ab.id} bot={ab} userId={user!.id} />
           ))}
         </div>
       )}
@@ -222,16 +201,15 @@ function BotCard({
     mode === "demo" ? balance : currencyPool === "USD" ? fiatLiveBalance : usdtBalance;
 
   const gradient = TIER_COLORS[bot.tier_key] ?? "from-primary to-primary/80";
-  const minRoi = Number(bot.min_roi);
-  const maxRoi = Number(bot.max_roi);
+  const minRoi = Math.max(20, Number(bot.min_roi ?? 20));
+  const maxRoi = Math.max(20, Number(bot.max_roi ?? 20));
   const isHourly = bot.payout_interval === "hourly";
-  const dailyPayout = isHourly
-    ? Number(bot.hourly_payout ?? 0) * 24
-    : Number(bot.daily_payout ?? 0) ||
-      (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100;
-  const hourlyPayout = isHourly ? Number(bot.hourly_payout ?? 0) : dailyPayout / 24;
-  const dailyRoiPct = (dailyPayout / Number(bot.capital_required)) * 100;
-  const totalReturn = dailyPayout * 10;
+  const dailyPayout =
+    Number(bot.daily_payout ?? 0) || (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100;
+  const hourlyPayout = Number(bot.hourly_payout ?? 0) || dailyPayout / 24;
+  const dailyRoiPct = Math.max(20, (dailyPayout / Number(bot.capital_required)) * 100);
+  const duration = Number(bot.duration_days ?? 10);
+  const totalReturn = dailyPayout * duration;
   const roiMultiple = totalReturn / Number(bot.capital_required);
 
   const activate = async () => {
@@ -335,12 +313,15 @@ function BotCard({
       const { error: botErr } = await supabase.from("user_active_bots").insert({
         user_id: user!.id,
         bot_id: bot.id,
+        bot_name: bot.name,
         invested_amount: usd,
         activation_date: new Date().toISOString(),
         expiration_date: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
         last_payout_at: new Date().toISOString(),
         current_profit: 0,
+        profit_accumulated: 0,
         status: "active",
+        account_mode: mode,
       } as never);
 
       if (botErr) throw botErr;
@@ -552,5 +533,246 @@ function BotCard({
         </div>
       </Card>
     </motion.div>
+  );
+}
+
+function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
+  const qc = useQueryClient();
+  const [harvesting, setHarvesting] = useState(false);
+  const [settling, setSettling] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  // 1-second dynamic ticker for real-time second-by-second accuracy
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timing = calculateBotProfitByTime(bot, now);
+  const invested = Number(bot.invested_amount ?? 0);
+  const profit = timing.totalProfit;
+  const totalReturn = invested + profit;
+  const isRunning = bot.status === "active" || bot.status === "running";
+
+  const handleHarvest = async () => {
+    if (profit <= 0) {
+      toast.info("Earnings accumulate continuously. Harvest is available once profit > $0.00.");
+      return;
+    }
+    setHarvesting(true);
+    try {
+      const res = await harvestBotProfitServerFn({
+        data: { userId, activeBotId: bot.id },
+      });
+      if (res?.success) {
+        soundFX.playDepositBonus();
+        soundFX.triggerHaptic(50);
+        toast.success(res.message);
+        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
+      } else {
+        toast.error(res?.message ?? "Harvest failed");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Harvest error");
+    } finally {
+      setHarvesting(false);
+    }
+  };
+
+  const handleSettle = async () => {
+    setSettling(true);
+    try {
+      const res = await terminateBotServerFn({
+        data: { userId, activeBotId: bot.id },
+      });
+      if (res?.success) {
+        soundFX.playSuccess();
+        soundFX.triggerHaptic(40);
+        toast.success(res.message);
+        setConfirmOpen(false);
+        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
+      } else {
+        toast.error(res?.message ?? "Settlement failed");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Settlement error");
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  return (
+    <Card className="p-4 border-amber-500/20 bg-gradient-to-r from-amber-500/5 via-card to-card">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              {isRunning && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${
+                  isRunning ? "bg-emerald-500" : "bg-zinc-500"
+                }`}
+              />
+            </span>
+            <div className="font-semibold text-sm sm:text-base">
+              {bot.trading_bots?.name ?? bot.bot_name ?? "AI Trading Bot"}
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              Invested:{" "}
+              <span className="font-semibold text-foreground">${invested.toFixed(2)}</span>
+            </span>
+            <span>·</span>
+            <span>
+              Mode:{" "}
+              <span
+                className={`uppercase font-bold ${
+                  bot.account_mode === "demo" ? "text-amber-400" : "text-emerald-400"
+                }`}
+              >
+                {bot.account_mode === "demo" ? "Demo" : "Live Cash"}
+              </span>
+            </span>
+            <span>·</span>
+            <span className="text-primary font-medium">
+              Rate: ${timing.dailyPayout.toFixed(2)}/day
+            </span>
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <Badge
+              variant="outline"
+              className="text-[10px] border-border/60 bg-surface/50 font-normal"
+            >
+              <Clock className="w-3 h-3 mr-1 text-primary" />
+              {timing.timeSinceLastHarvestLabel}
+            </Badge>
+            <span>·</span>
+            <span>
+              Started: {timing.startDate.toLocaleDateString()}{" "}
+              {timing.startDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            {bot.expires_at && (
+              <>
+                <span>·</span>
+                <span>Expires: {new Date(bot.expires_at).toLocaleDateString()}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="text-right mr-1">
+            <div className="text-sm sm:text-base font-bold text-emerald-400 tabular-nums">
+              +${profit.toFixed(2)}
+            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              Harvestable Profit
+            </div>
+          </div>
+
+          <Badge
+            className={
+              isRunning
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]"
+                : "bg-muted text-muted-foreground text-[10px]"
+            }
+          >
+            {bot.status}
+          </Badge>
+
+          {isRunning && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={harvesting || profit <= 0}
+                onClick={handleHarvest}
+                className="h-8 text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200"
+                title="Collect accumulated profits directly to your cash wallet"
+              >
+                {harvesting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5 mr-1 text-amber-400" />
+                    Harvest
+                  </>
+                )}
+              </Button>
+
+              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                    title="Stop bot early and refund capital + profit"
+                  >
+                    Settle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Settle &amp; Close Bot</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2 text-sm">
+                    <p className="text-muted-foreground">
+                      Are you sure you want to stop{" "}
+                      <span className="font-semibold text-foreground">
+                        {bot.trading_bots?.name ?? bot.bot_name}
+                      </span>
+                      ?
+                    </p>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Principal Capital:</span>
+                        <span className="font-bold tabular-nums">${invested.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          Accrued Profit ({timing.timeSinceLastHarvestLabel}):
+                        </span>
+                        <span className="font-bold text-emerald-400 tabular-nums">
+                          +${profit.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="border-t border-white/10 pt-2 flex justify-between font-bold text-sm">
+                        <span>Total Refund to Wallet:</span>
+                        <span className="text-amber-400 tabular-nums">
+                          ${totalReturn.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+                      Keep Running
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={settling}
+                      onClick={handleSettle}
+                    >
+                      {settling ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm &amp; Settle
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }

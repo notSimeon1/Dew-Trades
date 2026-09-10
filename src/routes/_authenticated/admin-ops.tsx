@@ -679,8 +679,14 @@ function PaymentsTab() {
           identifier_label: String(val(m, "identifier_label")),
           identifier: String(val(m, "identifier")),
           recipient_name: String(val(m, "recipient_name")),
+          cash_app_link:
+            m.method_key === "cash_app" || m.method_key === "cashapp"
+              ? String(val(m, "cash_app_link"))
+              : null,
           extra:
-            m.method_key === "cash_app" ? { cash_app_link: String(val(m, "cash_app_link")) } : {},
+            m.method_key === "cash_app" || m.method_key === "cashapp"
+              ? { cash_app_link: String(val(m, "cash_app_link")) }
+              : {},
           is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
           sort_order: Number(val(m, "sort_order")) || 0,
           updated_at: new Date().toISOString(),
@@ -690,7 +696,16 @@ function PaymentsTab() {
       toast.success(`${val(m, "method_name")} updated — live on deposit pages`);
       setDraft((d) => ({ ...d, [m.method_key]: {} }));
       qc.invalidateQueries({ queryKey: ["admin_payment_methods"] });
+      qc.invalidateQueries({ queryKey: ["admin_payment_methods_active"] });
       qc.invalidateQueries({ queryKey: ["payment_methods_active"] });
+      qc.invalidateQueries({ queryKey: ["payment_methods"] });
+      qc.invalidateQueries({ queryKey: ["buy_payment_methods"] });
+      qc.invalidateQueries({ queryKey: ["deposit_wallets"] });
+      supabase.channel("dewtrades-global-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "admin_payment_methods" },
+      });
     } catch (err: any) {
       toast.error(err.message ?? "Save failed");
     } finally {
@@ -785,7 +800,7 @@ function PaymentsTab() {
                 </div>
               </div>
 
-              {m.method_key === "cash_app" && (
+              {(m.method_key === "cash_app" || m.method_key === "cashapp") && (
                 <div>
                   <label className="text-xs text-muted-foreground">
                     Cash App Link (clickable URL)
@@ -793,7 +808,7 @@ function PaymentsTab() {
                   <Input
                     className="mt-1 h-9"
                     placeholder="https://cash.app/$yourname"
-                    value={val(m, "cash_app_link")}
+                    value={val(m, "cash_app_link") || val(m, "extra")?.cash_app_link || ""}
                     onChange={(e) => set(m.method_key, "cash_app_link", e.target.value)}
                   />
                 </div>
@@ -988,11 +1003,19 @@ function BotsTab() {
         .update({
           name: String(val(b, "name")),
           capital_required: Number(val(b, "capital_required")),
-          min_roi: Number(val(b, "min_roi")),
-          max_roi: Number(val(b, "max_roi")),
+          min_roi: Math.max(20, Number(val(b, "min_roi"))),
+          max_roi: Math.max(20, Number(val(b, "max_roi")) || Number(val(b, "min_roi"))),
           win_rate: Number(val(b, "win_rate")),
           duration_days: Number(val(b, "duration_days")),
-          hourly_payout: Number(val(b, "hourly_payout")) || 0,
+          payout_interval: "daily",
+          daily_payout:
+            Number(val(b, "daily_payout")) ||
+            (Number(val(b, "capital_required")) * Math.max(20, Number(val(b, "min_roi")))) / 100,
+          hourly_payout:
+            Number(val(b, "hourly_payout")) ||
+            (Number(val(b, "capital_required")) * Math.max(20, Number(val(b, "min_roi")))) /
+              100 /
+              24,
           status:
             (draft[b.id]?.is_active ?? b.is_active) === false ? "paused" : String(val(b, "status")),
           updated_at: new Date().toISOString(),
@@ -1003,6 +1026,12 @@ function BotsTab() {
       setDraft((d) => ({ ...d, [b.id]: {} }));
       qc.invalidateQueries({ queryKey: ["admin_ops_bots"] });
       qc.invalidateQueries({ queryKey: ["trading_bots"] });
+      qc.invalidateQueries({ queryKey: ["admin_bots"] });
+      supabase.channel("dewtrades-global-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "trading_bots" },
+      });
     } catch (err: any) {
       toast.error(err.message ?? "Update failed");
     } finally {

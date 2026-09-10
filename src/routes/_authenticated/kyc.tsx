@@ -59,7 +59,7 @@ function KycPage() {
         .from("kyc_submissions")
         .select("*")
         .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
+        .order("submitted_at" as never, { ascending: false });
       return data ?? [];
     },
     enabled: !!user,

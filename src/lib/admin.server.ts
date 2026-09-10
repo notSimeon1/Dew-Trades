@@ -239,7 +239,10 @@ export async function adminGetOverview(userId: string) {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(300),
-    supabaseAdmin.from("kyc_submissions").select("*").order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("kyc_submissions")
+      .select("*")
+      .order("submitted_at" as never, { ascending: false }),
     supabaseAdmin.from("referral_earnings").select("*").order("created_at", { ascending: false }),
     supabaseAdmin
       .from("live_positions")

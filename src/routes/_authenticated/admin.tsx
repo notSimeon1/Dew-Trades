@@ -2761,14 +2761,27 @@ function AdminBotsTab() {
   });
   const { data: activeBots } = useQuery({
     queryKey: ["admin_active_bots_list"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("user_active_bots")
-          .select("*, trading_bots(name), profiles!inner(email)")
-          .order("created_at", { ascending: false })
-          .limit(50)
-      ).data ?? [],
+    queryFn: async () => {
+      const { data: bots, error } = await supabase
+        .from("user_active_bots")
+        .select("*, trading_bots(name)")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error || !bots || bots.length === 0) return [];
+      const userIds = Array.from(new Set(bots.map((b: any) => b.user_id).filter(Boolean)));
+      const { data: userProfiles } =
+        userIds.length > 0
+          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          : { data: [] };
+      const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
+      return bots.map((b: any) => ({
+        ...b,
+        user_email:
+          profileMap.get(b.user_id)?.email ??
+          profileMap.get(b.user_id)?.full_name ??
+          b.user_id?.slice(0, 8),
+      }));
+    },
     refetchInterval: 10000,
   });
   return (
@@ -2826,22 +2839,20 @@ function AdminBotsTab() {
                 className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm"
               >
                 <div>
-                  <div className="font-semibold">{ab.trading_bots?.name ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {(ab.profiles as any)?.email ?? "—"}
-                  </div>
+                  <div className="font-semibold">{ab.trading_bots?.name ?? ab.bot_name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{ab.user_email ?? "—"}</div>
                 </div>
                 <div className="text-right">
                   <div className="font-bold tabular-nums">
                     ${Number(ab.invested_amount).toFixed(2)}
                   </div>
                   <div className="text-xs text-success">
-                    +${Number(ab.current_profit).toFixed(2)}
+                    +${Number(ab.profit_accumulated ?? ab.current_profit ?? 0).toFixed(2)}
                   </div>
                 </div>
                 <Badge
                   className={
-                    ab.status === "running"
+                    ab.status === "active" || ab.status === "running"
                       ? "bg-success/20 text-success"
                       : "bg-muted text-muted-foreground"
                   }
@@ -2866,14 +2877,27 @@ function AdminCopyTab() {
   });
   const { data: allocations } = useQuery({
     queryKey: ["admin_copy_allocations"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("user_copy_allocations")
-          .select("*, copy_trading_tiers(tier_name), profiles!inner(email)")
-          .order("created_at", { ascending: false })
-          .limit(50)
-      ).data ?? [],
+    queryFn: async () => {
+      const { data: allocs, error } = await supabase
+        .from("user_copy_allocations")
+        .select("*, copy_trading_tiers(tier_name)")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error || !allocs || allocs.length === 0) return [];
+      const userIds = Array.from(new Set(allocs.map((a: any) => a.user_id).filter(Boolean)));
+      const { data: userProfiles } =
+        userIds.length > 0
+          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          : { data: [] };
+      const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
+      return allocs.map((a: any) => ({
+        ...a,
+        user_email:
+          profileMap.get(a.user_id)?.email ??
+          profileMap.get(a.user_id)?.full_name ??
+          a.user_id?.slice(0, 8),
+      }));
+    },
     refetchInterval: 10000,
   });
   return (
@@ -2925,22 +2949,22 @@ function AdminCopyTab() {
                 className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm"
               >
                 <div>
-                  <div className="font-semibold">{a.copy_trading_tiers?.tier_name ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {(a.profiles as any)?.email ?? "—"}
+                  <div className="font-semibold">
+                    {a.copy_trading_tiers?.tier_name ?? a.strategist_name ?? "—"}
                   </div>
+                  <div className="text-xs text-muted-foreground">{a.user_email ?? "—"}</div>
                 </div>
                 <div className="text-right">
                   <div className="font-bold tabular-nums">
                     ${Number(a.allocated_amount).toFixed(2)}
                   </div>
                   <div className="text-xs text-success">
-                    +${Number(a.current_profit).toFixed(2)}
+                    +${Number(a.total_profit ?? a.current_profit ?? 0).toFixed(2)}
                   </div>
                 </div>
                 <Badge
                   className={
-                    a.status === "active"
+                    a.status === "active" || a.status === "running"
                       ? "bg-success/20 text-success"
                       : "bg-muted text-muted-foreground"
                   }
@@ -2965,14 +2989,27 @@ function AdminPreMarketTab({ tickers }: { tickers?: Record<string, Ticker> }) {
   });
   const { data: allocations } = useQuery({
     queryKey: ["admin_premarket_allocations"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("user_pre_market_allocations")
-          .select("*, pre_market_tokens(token_name, symbol), profiles!inner(email)")
-          .order("created_at", { ascending: false })
-          .limit(50)
-      ).data ?? [],
+    queryFn: async () => {
+      const { data: allocs, error } = await supabase
+        .from("user_pre_market_allocations")
+        .select("*, pre_market_tokens(token_name, symbol)")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error || !allocs || allocs.length === 0) return [];
+      const userIds = Array.from(new Set(allocs.map((a: any) => a.user_id).filter(Boolean)));
+      const { data: userProfiles } =
+        userIds.length > 0
+          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          : { data: [] };
+      const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
+      return allocs.map((a: any) => ({
+        ...a,
+        user_email:
+          profileMap.get(a.user_id)?.email ??
+          profileMap.get(a.user_id)?.full_name ??
+          a.user_id?.slice(0, 8),
+      }));
+    },
     refetchInterval: 10000,
   });
   return (
@@ -3036,7 +3073,7 @@ function AdminPreMarketTab({ tickers }: { tickers?: Record<string, Ticker> }) {
                     {a.pre_market_tokens?.token_name ?? "—"} ({a.pre_market_tokens?.symbol ?? "—"})
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {(a.profiles as any)?.email ?? "—"}
+                    {a.user_email ?? (a.profiles as any)?.email ?? "—"}
                   </div>
                 </div>
                 <div className="text-right">

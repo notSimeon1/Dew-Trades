@@ -6,12 +6,12 @@ import type { Database } from "./types";
 // different project than the server checks, every authenticated server call
 // fails with "Unauthorized: Invalid token".
 const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ?? "https://dmfdovwiczhpnqlykjix.supabase.co";
+  import.meta.env.VITE_SUPABASE_URL ?? "https://wbdfjruovvolsmzpihqc.supabase.co";
 
 const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
   import.meta.env.VITE_SUPABASE_ANON_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZmRvdndpY3pocG5xbHlraml4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MzA1OTMsImV4cCI6MjEwMTEwNjU5M30.Hho5fwB9yPk_cCTAAfN9wD_yxGZIMkPagArg_RuQFXE";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZGZqcnVvdnZvbHNtenBpaHFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc4ODIxOCwiZXhwIjoyMTA0MzY0MjE4fQ.Z8GUd0OkLSdWpilr2vbdlOeVDNDgfPe0wKBrtm4rujY";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

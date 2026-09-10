@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <!-- Obsidian Glass Badge Background -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#181B22"/>
+      <stop offset="50%" stop-color="#0F1116"/>
+      <stop offset="100%" stop-color="#07080B"/>
+    </linearGradient>
+
+    <!-- Liquid Gold Frame Rim -->
+    <linearGradient id="rimGrad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="50%" stop-color="#EAB308"/>
+      <stop offset="100%" stop-color="#854D0E"/>
+    </linearGradient>
+
+    <!-- Metallic Silver-Platinum Outer D -->
+    <linearGradient id="dGrad" x1="20" y1="20" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+
+    <!-- Glowing Liquid Gold Inner T -->
+    <linearGradient id="tGrad" x1="42" y1="38" x2="86" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FEF08A"/>
+      <stop offset="35%" stop-color="#FACC15"/>
+      <stop offset="75%" stop-color="#EAB308"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+
+    <!-- Subtle Drop Shadow -->
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Shield Rounded Rect -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bgGrad)" stroke="url(#rimGrad)" stroke-width="3" filter="url(#badgeShadow)"/>
+
+  <!-- Liquid Glass Inner Specular Arc -->
+  <path d="M 12 30 C 12 18, 22 10, 36 10 H 92 C 106 10, 116 18, 116 30 C 100 36, 28 36, 12 30 Z" fill="#FFFFFF" opacity="0.08" />
+
+  <!-- Outer Geometric Capital D -->
+  <path
+    d="M 28 24
+       H 68
+       C 94 24, 108 38, 108 64
+       C 108 90, 94 104, 68 104
+       H 28
+       Z
+       M 42 38
+       V 90
+       H 66
+       C 84 90, 94 78, 94 64
+       C 94 50, 84 38, 66 38
+       Z"
+    fill="url(#dGrad)"
+    fill-rule="evenodd"
+  />
+
+  <!-- Embedded Capital T nestled in the counter of D -->
+  <!-- T Top Horizontal Bar -->
+  <rect x="48" y="46" width="36" height="11" rx="2" fill="url(#tGrad)" />
+  <!-- T Vertical Stem -->
+  <rect x="60.5" y="57" width="11" height="26" rx="2" fill="url(#tGrad)" />
+
+  <!-- Corner Precision Accent -->
+  <rect x="30" y="26" width="5" height="5" rx="1" fill="#FACC15" />
+</svg>

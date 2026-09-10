@@ -7,6 +7,7 @@ import { Navbar } from "@/components/Navbar";
 import { LiveChatWidget } from "@/components/LiveChatWidget";
 import { SuspendedAccountAlert } from "@/components/SuspendedAccountAlert";
 import { useRealtimeProfitEngine } from "@/hooks/useRealtimeProfitEngine";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { Loader as Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -19,6 +20,7 @@ function AuthenticatedLayout() {
   const location = useLocation();
 
   useRealtimeProfitEngine();
+  useRealtimeSync();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],

@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  calculateBotProfitByTime,
+  calculateCopyProfitByTime,
+  encodeCopyTierKey,
+} from "@/lib/profit-timing";
 
 export const activateBotServerFn = createServerFn({ method: "POST" })
   .validator(
@@ -136,27 +141,29 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         if (updateBalErr) throw new Error("Failed to deduct USD live balance.");
       }
 
-      // 4. Calculate payouts & expiration date
-      const minRoi = Number(botData.min_roi ?? 5);
-      const maxRoi = Number(botData.max_roi ?? 15);
+      // 4. Calculate payouts & expiration date (strictly >= 20% daily ROI)
+      const minRoi = Math.max(20, Number(botData.min_roi ?? 20));
+      const maxRoi = Math.max(20, Number(botData.max_roi ?? 20));
       const avgRoi = (minRoi + maxRoi) / 2;
-      const dailyPayout = Number(botData.daily_payout ?? 0) || (data.amount * avgRoi) / 100;
-      const hourlyPayout = Number(botData.hourly_payout ?? 0) || dailyPayout / 24;
-      const durationDays = Number(botData.duration_days ?? 30);
-      const expirationDate = new Date(
-        Date.now() + durationDays * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      const dailyPayout = Number(((data.amount * avgRoi) / 100).toFixed(2));
+      const hourlyPayout = Number((dailyPayout / 24).toFixed(4));
+      const durationDays = Number(botData.duration_days ?? 10);
+      const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
       // 5. Insert active bot record with clean schema-matching columns
       const cleanBotPayload = {
         user_id: data.userId,
         bot_id: data.botId,
+        bot_name: botData.name || "AI Trading Bot",
         invested_amount: data.amount,
-        activation_date: new Date().toISOString(),
-        expiration_date: expirationDate,
-        last_payout_at: new Date().toISOString(),
-        current_profit: 0,
+        profit_accumulated: 0,
+        daily_payout: dailyPayout,
+        hourly_payout: hourlyPayout,
+        payout_interval: "daily",
+        account_mode: data.mode,
         status: "active",
+        expires_at: expiresAt,
+        last_payout_at: new Date().toISOString(),
       };
 
       const { error: botErr } = await supabaseAdmin
@@ -220,5 +227,312 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         success: false,
         message: err?.message || "Failed to activate trading bot.",
       };
+    }
+  });
+
+export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; activeBotId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const { data: bot, error: botErr } = await supabaseAdmin
+        .from("user_active_bots" as any)
+        .select("*")
+        .eq("id", data.activeBotId)
+        .eq("user_id", data.userId)
+        .single();
+
+      if (botErr || !bot) return { success: false, message: "Active bot not found." };
+
+      const b = bot as any;
+      const timing = calculateBotProfitByTime(b);
+      const profit = Number(timing.totalProfit.toFixed(2));
+      if (profit <= 0) {
+        return { success: false, message: "No accumulated profit to harvest at this time." };
+      }
+
+      // Fetch user profile
+      const { data: prof } = await supabaseAdmin
+        .from("profiles" as any)
+        .select("id, demo_balance, live_balance, account_balance, available_cash")
+        .eq("id", data.userId)
+        .single();
+
+      const p = prof as any;
+      if (b.account_mode === "demo") {
+        const cur = Number(p?.demo_balance ?? 10000);
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({ demo_balance: Number((cur + profit).toFixed(2)) })
+          .eq("id", data.userId);
+      } else {
+        const cur = Number(p?.live_balance ?? p?.account_balance ?? 0);
+        const next = Number((cur + profit).toFixed(2));
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({
+            live_balance: next,
+            account_balance: next,
+            available_cash: next,
+          })
+          .eq("id", data.userId);
+      }
+
+      // Reset bot accumulated profit and stamp last_payout_at to now
+      await supabaseAdmin
+        .from("user_active_bots" as any)
+        .update({
+          profit_accumulated: 0,
+          current_profit: 0,
+          last_payout_at: new Date().toISOString(),
+        })
+        .eq("id", data.activeBotId);
+
+      // Record transaction
+      await supabaseAdmin.from("transactions" as any).insert({
+        user_id: data.userId,
+        type: "trade_profit",
+        amount: profit,
+        asset_name: `Harvested Yield: ${b.bot_name}`,
+        status: "completed",
+        account_mode: b.account_mode,
+      });
+
+      return {
+        success: true,
+        harvestedAmount: profit,
+        timeElapsedLabel: timing.timeSinceLastHarvestLabel,
+        message: `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
+      };
+    } catch (err: any) {
+      return { success: false, message: err?.message || "Failed to harvest profit." };
+    }
+  });
+
+export const terminateBotServerFn = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; activeBotId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const { data: bot, error: botErr } = await supabaseAdmin
+        .from("user_active_bots" as any)
+        .select("*")
+        .eq("id", data.activeBotId)
+        .eq("user_id", data.userId)
+        .single();
+
+      if (botErr || !bot) return { success: false, message: "Active bot not found." };
+
+      const b = bot as any;
+      const principal = Number(b.invested_amount ?? 0);
+      const timing = calculateBotProfitByTime(b);
+      const profit = Number(timing.totalProfit.toFixed(2));
+      const totalRefund = Number((principal + profit).toFixed(2));
+
+      // Fetch user profile
+      const { data: prof } = await supabaseAdmin
+        .from("profiles" as any)
+        .select("id, demo_balance, live_balance, account_balance, available_cash")
+        .eq("id", data.userId)
+        .single();
+
+      const p = prof as any;
+      if (b.account_mode === "demo") {
+        const cur = Number(p?.demo_balance ?? 10000);
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({ demo_balance: Number((cur + totalRefund).toFixed(2)) })
+          .eq("id", data.userId);
+      } else {
+        const cur = Number(p?.live_balance ?? p?.account_balance ?? 0);
+        const next = Number((cur + totalRefund).toFixed(2));
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({
+            live_balance: next,
+            account_balance: next,
+            available_cash: next,
+          })
+          .eq("id", data.userId);
+      }
+
+      // Mark bot completed/stopped
+      await supabaseAdmin
+        .from("user_active_bots" as any)
+        .update({
+          status: "completed",
+          profit_accumulated: 0,
+          current_profit: 0,
+        })
+        .eq("id", data.activeBotId);
+
+      // Record transaction
+      await supabaseAdmin.from("transactions" as any).insert({
+        user_id: data.userId,
+        type: "bot_settlement",
+        amount: totalRefund,
+        asset_name: `Settled AI Bot: ${b.bot_name} (Principal + Profit)`,
+        status: "completed",
+        account_mode: b.account_mode,
+      });
+
+      return {
+        success: true,
+        refundedAmount: totalRefund,
+        message: `Bot settled successfully. Returned $${totalRefund.toFixed(2)} to your balance.`,
+      };
+    } catch (err: any) {
+      return { success: false, message: err?.message || "Failed to settle bot." };
+    }
+  });
+
+export const harvestCopyProfitServerFn = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; allocationId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const { data: alloc, error: allocErr } = await supabaseAdmin
+        .from("user_copy_allocations" as any)
+        .select("*")
+        .eq("id", data.allocationId)
+        .eq("user_id", data.userId)
+        .single();
+
+      if (allocErr || !alloc) return { success: false, message: "Copy allocation not found." };
+
+      const a = alloc as any;
+      const timing = calculateCopyProfitByTime(a);
+      const profit = Number(timing.totalProfit.toFixed(2));
+      if (profit <= 0) {
+        return { success: false, message: "No accumulated profit to harvest at this time." };
+      }
+
+      const { data: prof } = await supabaseAdmin
+        .from("profiles" as any)
+        .select("id, demo_balance, live_balance, account_balance, available_cash")
+        .eq("id", data.userId)
+        .single();
+
+      const p = prof as any;
+      const isDemo =
+        a.account_mode === "demo" ||
+        (typeof a.tier_key === "string" && a.tier_key.endsWith(":demo"));
+
+      if (isDemo) {
+        const cur = Number(p?.demo_balance ?? 10000);
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({ demo_balance: Number((cur + profit).toFixed(2)) })
+          .eq("id", data.userId);
+      } else {
+        const cur = Number(p?.live_balance ?? p?.account_balance ?? 0);
+        const next = Number((cur + profit).toFixed(2));
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({
+            live_balance: next,
+            account_balance: next,
+            available_cash: next,
+          })
+          .eq("id", data.userId);
+      }
+
+      const newTierKey = encodeCopyTierKey(a.tier_key || "tier", isDemo, Date.now());
+      await supabaseAdmin
+        .from("user_copy_allocations" as any)
+        .update({
+          tier_key: newTierKey,
+          total_profit: 0,
+          current_profit: 0,
+        })
+        .eq("id", data.allocationId);
+
+      await supabaseAdmin.from("transactions" as any).insert({
+        user_id: data.userId,
+        type: "trade_profit",
+        amount: profit,
+        asset_name: `Harvested Copy Profit: ${a.strategist_name || "Strategist"}`,
+        status: "completed",
+        account_mode: isDemo ? "demo" : "live",
+      });
+
+      return {
+        success: true,
+        harvestedAmount: profit,
+        timeElapsedLabel: timing.timeSinceLastHarvestLabel,
+        message: `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
+      };
+    } catch (err: any) {
+      return { success: false, message: err?.message || "Failed to harvest copy profit." };
+    }
+  });
+
+export const terminateCopyAllocationServerFn = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; allocationId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const { data: alloc, error: allocErr } = await supabaseAdmin
+        .from("user_copy_allocations" as any)
+        .select("*")
+        .eq("id", data.allocationId)
+        .eq("user_id", data.userId)
+        .single();
+
+      if (allocErr || !alloc) return { success: false, message: "Copy allocation not found." };
+
+      const a = alloc as any;
+      const principal = Number(a.allocated_amount ?? 0);
+      const timing = calculateCopyProfitByTime(a);
+      const profit = Number(timing.totalProfit.toFixed(2));
+      const totalRefund = Number((principal + profit).toFixed(2));
+
+      const { data: prof } = await supabaseAdmin
+        .from("profiles" as any)
+        .select("id, demo_balance, live_balance, account_balance, available_cash")
+        .eq("id", data.userId)
+        .single();
+
+      const p = prof as any;
+      const isDemo =
+        a.account_mode === "demo" ||
+        (typeof a.tier_key === "string" && a.tier_key.endsWith(":demo"));
+
+      if (isDemo) {
+        const cur = Number(p?.demo_balance ?? 10000);
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({ demo_balance: Number((cur + totalRefund).toFixed(2)) })
+          .eq("id", data.userId);
+      } else {
+        const cur = Number(p?.live_balance ?? p?.account_balance ?? 0);
+        const next = Number((cur + totalRefund).toFixed(2));
+        await supabaseAdmin
+          .from("profiles" as any)
+          .update({
+            live_balance: next,
+            account_balance: next,
+            available_cash: next,
+          })
+          .eq("id", data.userId);
+      }
+
+      await supabaseAdmin
+        .from("user_copy_allocations" as any)
+        .update({ status: "closed", total_profit: 0, current_profit: 0 })
+        .eq("id", data.allocationId);
+
+      await supabaseAdmin.from("transactions" as any).insert({
+        user_id: data.userId,
+        type: "copy_trade_close",
+        amount: totalRefund,
+        asset_name: `Closed Copy Allocation: ${a.strategist_name || "Strategist"}`,
+        status: "completed",
+        account_mode: isDemo ? "demo" : "live",
+      });
+
+      return {
+        success: true,
+        refundedAmount: totalRefund,
+        message: `Copy allocation closed. Returned $${totalRefund.toFixed(2)} to your balance.`,
+      };
+    } catch (err: any) {
+      return { success: false, message: err?.message || "Failed to close copy allocation." };
     }
   });

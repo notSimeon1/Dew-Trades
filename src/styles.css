@@ -37,8 +37,8 @@
   --color-champagne: var(--champagne);
   --color-midnight: var(--midnight);
   --color-navy-gray: var(--navy-gray);
-  --font-display: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 :root {
@@ -152,9 +152,11 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
   }
   * {
     border-color: var(--color-border);
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     background-color: var(--color-background);
@@ -165,6 +167,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+  button, a, input, select {
+    touch-action: manipulation;
   }
   h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.025em; font-weight: 700; }
   code, kbd, samp, pre { font-family: var(--font-mono); }
@@ -176,42 +182,54 @@
   .shadow-elegant { box-shadow: var(--shadow-lg); }
   .shadow-glow { box-shadow: var(--shadow-glow); }
   .text-gradient {
-    background: linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 50%, #00D084 100%);
+    background: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 50%, #EAB308 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
 
+  /* Enhanced Liquid Glass Utilities */
+  .liquid-glass {
+    background: rgba(16, 18, 23, 0.65);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+  }
+  .liquid-glass-elevated {
+    background: rgba(23, 26, 34, 0.75);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.85), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25), 0 0 20px rgba(234, 179, 8, 0.12);
+  }
+  .liquid-glass-pill {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
   .bg-morph { position: relative; overflow: hidden; isolation: isolate; }
   .bg-morph::before, .bg-morph::after {
     content: ""; position: absolute; z-index: -1;
-    width: 55vmax; height: 55vmax; border-radius: 50%;
-    filter: blur(90px); opacity: 0.35;
-    will-change: transform, border-radius;
+    width: 45vmax; height: 45vmax; border-radius: 50%;
+    filter: blur(80px); opacity: 0.22;
+    will-change: transform;
+    transform: translateZ(0);
   }
   .bg-morph::before {
     top: -20%; left: -10%;
-    background: radial-gradient(circle at 30% 30%, rgba(0, 208, 132, 0.25), transparent 60%);
-    animation: morph-a 18s ease-in-out infinite alternate;
+    background: radial-gradient(circle at 30% 30%, rgba(234, 179, 8, 0.2), transparent 60%);
   }
   .bg-morph::after {
     bottom: -25%; right: -15%;
-    background: radial-gradient(circle at 70% 70%, rgba(14, 165, 233, 0.2), transparent 60%);
-    animation: morph-b 22s ease-in-out infinite alternate;
-  }
-  @keyframes morph-a {
-    0%   { border-radius: 60% 40% 30% 70%/60% 30% 70% 40%; transform: translate(0,0) rotate(0deg); }
-    50%  { border-radius: 30% 60% 70% 40%/50% 60% 30% 60%; transform: translate(5%,4%) rotate(40deg); }
-    100% { border-radius: 50% 50% 40% 60%/40% 70% 30% 60%; transform: translate(-4%,6%) rotate(-30deg); }
-  }
-  @keyframes morph-b {
-    0%   { border-radius: 40% 60% 60% 40%/60% 40% 60% 40%; transform: translate(0,0) rotate(0deg); }
-    50%  { border-radius: 70% 30% 50% 50%/30% 60% 40% 70%; transform: translate(-6%,-3%) rotate(-50deg); }
-    100% { border-radius: 50% 50% 30% 70%/60% 30% 70% 40%; transform: translate(4%,-5%) rotate(35deg); }
+    background: radial-gradient(circle at 70% 70%, rgba(245, 158, 11, 0.15), transparent 60%);
   }
 
   .shimmer-text {
-    background: linear-gradient(90deg, #FFFFFF 0%, #00D084 50%, #FFFFFF 100%);
+    background: linear-gradient(90deg, #FFFFFF 0%, #EAB308 50%, #FFFFFF 100%);
     background-size: 200% auto;
     -webkit-background-clip: text; background-clip: text; color: transparent;
     animation: shimmer 6s linear infinite;

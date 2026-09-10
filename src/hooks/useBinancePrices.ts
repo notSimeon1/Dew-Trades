@@ -45,6 +45,8 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
     let cancelled = false;
     let ws: WebSocket | null = null;
     let pollInterval: NodeJS.Timeout | null = null;
+    let flushInterval: NodeJS.Timeout | null = null;
+    const pendingBatch: Record<string, Ticker> = {};
 
     // Normalizing requested symbols
     const cleanSymbols = Array.from(
@@ -57,13 +59,30 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
       ),
     );
 
-    const updateTicker = (
+    // Flush batch to state at controlled intervals (~300ms) for high performance & butter-smooth 60fps
+    flushInterval = setInterval(() => {
+      if (cancelled) return;
+      const keys = Object.keys(pendingBatch);
+      if (keys.length > 0) {
+        setTickers((prev) => {
+          const next = { ...prev };
+          for (const k of keys) {
+            next[k] = pendingBatch[k];
+            delete pendingBatch[k];
+          }
+          return next;
+        });
+      }
+    }, 300);
+
+    const queueTicker = (
       sym: string,
       price: number,
       change: number = 0,
       high: number = 0,
       low: number = 0,
       volume: number = 0,
+      immediate = false,
     ) => {
       if (cancelled || !price || isNaN(price)) return;
       const baseSym = sym.replace(/USDT$/, "");
@@ -83,18 +102,23 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
         direction,
       };
 
-      setTickers((prev) => ({
-        ...prev,
-        [sym]: item,
-        [baseSym]: item,
-      }));
+      if (immediate) {
+        setTickers((prev) => ({
+          ...prev,
+          [sym]: item,
+          [baseSym]: item,
+        }));
+      } else {
+        pendingBatch[sym] = item;
+        pendingBatch[baseSym] = item;
+      }
     };
 
     // 1. Fetch via Server-Side Proxy
     const fetchRestPrices = async () => {
       if (document.hidden) return;
       // Prepare USDT default
-      updateTicker("USDTUSDT", 1.0, 0, 1.0, 1.0, 1000000);
+      queueTicker("USDTUSDT", 1.0, 0, 1.0, 1.0, 1000000, true);
 
       const binanceSymbols = cleanSymbols.filter((s) => s !== "USDTUSDT");
       if (binanceSymbols.length === 0) return;
@@ -103,7 +127,7 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
         const results = await proxyCryptoPrices({ data: binanceSymbols });
         if (results && results.length > 0) {
           results.forEach((r) => {
-            updateTicker(r.symbol, r.price, r.change, r.high, r.low, r.volume);
+            queueTicker(r.symbol, r.price, r.change, r.high, r.low, r.volume, true);
           });
           setStatus("live");
           return;
@@ -117,7 +141,7 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
         setStatus("error");
         cleanSymbols.forEach((sym) => {
           const fb = FALLBACK_PRICES[sym] || FALLBACK_PRICES["BTCUSDT"];
-          if (fb) updateTicker(sym, fb.price, fb.change);
+          if (fb) queueTicker(sym, fb.price, fb.change, 0, 0, 0, true);
         });
       }
     };
@@ -143,13 +167,14 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
           try {
             const data = JSON.parse(event.data);
             if (data && data.s && data.c) {
-              updateTicker(
+              queueTicker(
                 data.s,
                 Number(data.c),
                 Number(data.P || 0),
                 Number(data.h || 0),
                 Number(data.l || 0),
                 Number(data.v || 0),
+                false,
               );
             }
           } catch (e) {
@@ -184,6 +209,7 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
     return () => {
       cancelled = true;
       if (pollInterval) clearInterval(pollInterval);
+      if (flushInterval) clearInterval(flushInterval);
       if (ws) {
         ws.close();
         ws = null;
