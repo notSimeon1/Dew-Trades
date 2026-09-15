@@ -318,7 +318,6 @@ function BotCard({
         activation_date: new Date().toISOString(),
         expiration_date: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
         last_payout_at: new Date().toISOString(),
-        current_profit: 0,
         profit_accumulated: 0,
         status: "active",
         account_mode: mode,
@@ -542,6 +541,7 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
   const [settling, setSettling] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [overrideLastPayoutAt, setOverrideLastPayoutAt] = useState<string | null>(null);
 
   // 1-second dynamic ticker for real-time second-by-second accuracy
   useEffect(() => {
@@ -549,7 +549,10 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  const timing = calculateBotProfitByTime(bot, now);
+  const effectiveBot = overrideLastPayoutAt
+    ? { ...bot, profit_accumulated: 0, last_payout_at: overrideLastPayoutAt }
+    : bot;
+  const timing = calculateBotProfitByTime(effectiveBot, now);
   const invested = Number(bot.invested_amount ?? 0);
   const profit = timing.totalProfit;
   const totalReturn = invested + profit;
@@ -569,9 +572,17 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
         soundFX.playDepositBonus();
         soundFX.triggerHaptic(50);
         toast.success(res.message);
-        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
-        qc.invalidateQueries({ queryKey: ["profile"] });
-        qc.invalidateQueries({ queryKey: ["transactions"] });
+        const newIso = (res as any).newLastPayoutAt || new Date().toISOString();
+        setOverrideLastPayoutAt(newIso);
+        qc.setQueriesData({ queryKey: ["my_active_bots"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((b) =>
+            b.id === bot.id ? { ...b, profit_accumulated: 0, last_payout_at: newIso } : b,
+          );
+        });
+        await qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+        await qc.invalidateQueries({ queryKey: ["profile"] });
+        await qc.invalidateQueries({ queryKey: ["transactions"] });
       } else {
         toast.error(res?.message ?? "Harvest failed");
       }

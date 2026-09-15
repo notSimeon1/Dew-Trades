@@ -372,6 +372,7 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
   const [settling, setSettling] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [overrideTierKey, setOverrideTierKey] = useState<string | null>(null);
 
   // 1-second dynamic ticker for real-time second-by-second accuracy
   useEffect(() => {
@@ -379,14 +380,19 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
     return () => clearInterval(timer);
   }, []);
 
-  const timing = calculateCopyProfitByTime(alloc, now);
+  const isDemo =
+    alloc.account_mode === "demo" ||
+    (typeof alloc.tier_key === "string" && alloc.tier_key.endsWith(":demo"));
+
+  const effectiveAlloc = overrideTierKey
+    ? { ...alloc, total_profit: 0, tier_key: overrideTierKey }
+    : alloc;
+
+  const timing = calculateCopyProfitByTime(effectiveAlloc, now);
   const allocated = Number(alloc.allocated_amount ?? 0);
   const profit = timing.totalProfit;
   const totalReturn = allocated + profit;
   const isRunning = alloc.status === "active" || alloc.status === "running";
-  const isDemo =
-    alloc.account_mode === "demo" ||
-    (typeof alloc.tier_key === "string" && alloc.tier_key.endsWith(":demo"));
 
   const handleHarvest = async () => {
     if (profit <= 0) {
@@ -402,9 +408,19 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
         soundFX.playDepositBonus();
         soundFX.triggerHaptic(50);
         toast.success(res.message);
-        qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
-        qc.invalidateQueries({ queryKey: ["profile"] });
-        qc.invalidateQueries({ queryKey: ["transactions"] });
+        const newKey =
+          (res as any).newTierKey ||
+          encodeCopyTierKey(alloc.tier_key || "tier", isDemo, Date.now());
+        setOverrideTierKey(newKey);
+        qc.setQueriesData({ queryKey: ["my_copy_allocations"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((a) =>
+            a.id === alloc.id ? { ...a, total_profit: 0, tier_key: newKey } : a,
+          );
+        });
+        await qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
+        await qc.invalidateQueries({ queryKey: ["profile"] });
+        await qc.invalidateQueries({ queryKey: ["transactions"] });
       } else {
         toast.error(res?.message ?? "Harvest failed");
       }

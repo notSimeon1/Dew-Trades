@@ -362,6 +362,10 @@ function Dashboard() {
     generateCandles(asset.sym, asset.base, mode, intensity, seed),
   );
   const randRef = useRef(seedRand(seed + 999));
+  const tickersRef = useRef(tickers);
+  tickersRef.current = tickers;
+  const candlesRef = useRef(candles);
+  candlesRef.current = candles;
 
   // Reset candles when asset / mode / seed change
   useEffect(() => {
@@ -387,7 +391,8 @@ function Dashboard() {
         if (!prev || prev.length === 0) return prev;
         const last = prev[prev.length - 1];
         const bSym = BINANCE_KLINE_MAP[asset.sym];
-        const livePrice = bSym ? tickers[bSym]?.price : undefined;
+        const currentTickers = tickersRef.current;
+        const livePrice = bSym ? currentTickers[bSym]?.price : undefined;
 
         if (mode === "live" && livePrice && livePrice > 0) {
           const updatedLast = {
@@ -404,7 +409,7 @@ function Dashboard() {
       });
     }, 2500);
     return () => clearInterval(id);
-  }, [asset.base, asset.sym, mode, intensity, tickers]);
+  }, [asset.base, asset.sym, mode, intensity]);
 
   const lastPrice = candles[candles.length - 1]?.close ?? asset.base;
   const firstPrice = candles[0]?.close ?? asset.base;
@@ -428,11 +433,12 @@ function Dashboard() {
     if (!aiTradingEnabled || !user?.id) return;
     const tick = async () => {
       if (aiBusyRef.current) return;
-      if (candles.length < 30) return;
+      const currentCandles = candlesRef.current;
+      if (!currentCandles || currentCandles.length < 30) return;
 
-      const closes = candles.map((c) => c.close);
-      const highs = candles.map((c) => c.high);
-      const lows = candles.map((c) => c.low);
+      const closes = currentCandles.map((c) => c.close);
+      const highs = currentCandles.map((c) => c.high);
+      const lows = currentCandles.map((c) => c.low);
       const price = closes[closes.length - 1];
       const sma = (n: number) => closes.slice(-n).reduce((s, v) => s + v, 0) / n;
       const sma20 = sma(20);
@@ -462,8 +468,8 @@ function Dashboard() {
       const lowerLow = recentLows[recentLows.length - 1] < Math.min(...recentLows.slice(0, -3));
 
       // Engulfing candle
-      const c1 = candles[candles.length - 2];
-      const c2 = candles[candles.length - 1];
+      const c1 = currentCandles[currentCandles.length - 2];
+      const c2 = currentCandles[currentCandles.length - 1];
       const bullEngulf =
         c1.close < c1.open && c2.close > c2.open && c2.close > c1.open && c2.open < c1.close;
       const bearEngulf =
@@ -608,7 +614,6 @@ function Dashboard() {
   }, [
     aiTradingEnabled,
     user?.id,
-    candles,
     assetSym,
     accountMode,
     isSuspended,

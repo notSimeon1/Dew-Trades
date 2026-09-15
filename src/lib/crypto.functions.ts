@@ -124,6 +124,9 @@ export const getUserAccountPortfolio = createServerFn({ method: "POST" })
     }
   });
 
+// In-memory cache for server proxy prices (4-second TTL)
+const serverPricesCache: { [key: string]: { timestamp: number; data: any[] } } = {};
+
 export const proxyCryptoPrices = createServerFn({ method: "GET" })
   .validator((symbols: string[]) => symbols)
   .handler(async ({ data: symbols }) => {
@@ -140,6 +143,12 @@ export const proxyCryptoPrices = createServerFn({ method: "GET" })
     const binanceSymbols = cleanSymbols.filter((s) => s !== "USDTUSDT");
     if (binanceSymbols.length === 0) return [];
 
+    const cacheKey = binanceSymbols.slice().sort().join(",");
+    const now = Date.now();
+    if (serverPricesCache[cacheKey] && now - serverPricesCache[cacheKey].timestamp < 4000) {
+      return serverPricesCache[cacheKey].data;
+    }
+
     const results: any[] = [];
 
     // Try Binance Primary Endpoint
@@ -148,11 +157,11 @@ export const proxyCryptoPrices = createServerFn({ method: "GET" })
         JSON.stringify(binanceSymbols),
       )}`;
 
-      const res = await fetch(binanceUrl, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(binanceUrl, { signal: AbortSignal.timeout(4000) });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          return data.map((d: any) => ({
+          const mapped = data.map((d: any) => ({
             symbol: d.symbol,
             price: Number(d.lastPrice),
             change: Number(d.priceChangePercent),
@@ -160,6 +169,8 @@ export const proxyCryptoPrices = createServerFn({ method: "GET" })
             low: Number(d.lowPrice),
             volume: Number(d.volume),
           }));
+          serverPricesCache[cacheKey] = { timestamp: now, data: mapped };
+          return mapped;
         }
       }
     } catch (e) {

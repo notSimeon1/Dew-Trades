@@ -205,12 +205,32 @@ function WithdrawPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="USDT">USDT (TRC20)</SelectItem>
-                <SelectItem value="BTC">BTC</SelectItem>
+                <SelectItem value="BTC">BTC (Bitcoin)</SelectItem>
+                <SelectItem value="ETH">ETH (ERC20)</SelectItem>
+                <SelectItem value="XRP">XRP (Ripple)</SelectItem>
+                <SelectItem value="SOL">SOL (Solana)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Amount (USD)</Label>
+            <div className="flex items-center justify-between">
+              <Label>Amount (USD)</Label>
+              <div className="flex gap-1">
+                {[0.25, 0.5, 0.75, 1.0].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => {
+                      const val = Math.floor(available * pct * 100) / 100;
+                      setAmount(val > 0 ? val.toString() : "");
+                    }}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground border border-border/60 transition-colors"
+                  >
+                    {pct === 1.0 ? "MAX" : `${pct * 100}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Input
               type="number"
               min={1}

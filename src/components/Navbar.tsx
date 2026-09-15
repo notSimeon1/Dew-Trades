@@ -328,31 +328,11 @@ export function Navbar() {
       <LiveTickerBar />
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07090e]/80 backdrop-blur-2xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-5">
-          {/* Brand & Sleek Expandable Trigger */}
+          {/* Brand */}
           <div className="flex items-center gap-3 sm:gap-4">
             <Link to="/" className="flex items-center shrink-0">
               <DewLogo size="sm" showText tagline={false} />
             </Link>
-
-            {/* Sleek Hamburger Expandable Menu Trigger Button */}
-            {user && (
-              <button
-                onClick={() => setOpen(true)}
-                className="relative flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-zinc-200 backdrop-blur-md hover:bg-white/[0.08] hover:border-amber-500/40 hover:text-amber-300 transition-all duration-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] group"
-                title="Open Navigation Menu (⌘K)"
-                aria-label="Open Navigation Menu"
-              >
-                <div className="flex flex-col gap-1 items-center justify-center w-4 h-3.5">
-                  <span className="w-3.5 h-[2px] rounded-full bg-amber-400 group-hover:w-4 transition-all" />
-                  <span className="w-4 h-[2px] rounded-full bg-zinc-200 group-hover:bg-amber-300 transition-all" />
-                  <span className="w-2.5 h-[2px] rounded-full bg-amber-400 group-hover:w-4 transition-all" />
-                </div>
-                <span className="hidden sm:inline font-medium tracking-wide">Menu</span>
-                <kbd className="hidden lg:inline-flex items-center rounded border border-white/10 bg-black/40 px-1 py-0.2 text-[9px] font-mono text-zinc-400">
-                  ⌘K
-                </kbd>
-              </button>
-            )}
           </div>
 
           {/* Right Section: Currency, Audio, Balance, Profile */}
@@ -478,6 +458,15 @@ export function Navbar() {
                     <Clock className="mr-2 h-4 w-4 text-zinc-400" />
                     Transactions
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem
+                      onClick={() => navigate({ to: "/admin" })}
+                      className="text-amber-400 font-semibold focus:text-amber-300"
+                    >
+                      <Shield className="mr-2 h-4 w-4 text-amber-400" />
+                      Admin Console
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem
                     onClick={async () => {

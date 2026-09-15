@@ -67,6 +67,8 @@ export function WhatsAppChat({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [mediaPreview, setMediaPreview] = useState<{ file: File; url: string } | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -259,8 +261,13 @@ export function WhatsAppChat({
     return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   };
 
+  // Filter messages by search query if active
+  const displayedMessages = searchQuery.trim()
+    ? messages.filter((m) => m.body?.toLowerCase().includes(searchQuery.toLowerCase().trim()))
+    : messages;
+
   // Group messages by date
-  const grouped = messages.reduce(
+  const grouped = displayedMessages.reduce(
     (acc, msg) => {
       const dateLabel = formatDateLabel(msg.created_at);
       if (!acc[dateLabel]) acc[dateLabel] = [];
@@ -295,13 +302,46 @@ export function WhatsAppChat({
         <div className="flex items-center gap-2 text-slate-400">
           <button
             type="button"
-            className="p-1.5 hover:text-slate-200 transition-colors"
-            title="Search messages"
+            onClick={() => {
+              setShowSearch((prev) => !prev);
+              if (showSearch) setSearchQuery("");
+            }}
+            className={`p-1.5 rounded-lg transition-colors ${
+              showSearch ? "bg-amber-500/20 text-amber-400" : "hover:text-slate-200"
+            }`}
+            title={showSearch ? "Close search" : "Search messages"}
           >
             <Search className="h-4 w-4" />
           </button>
         </div>
       </div>
+
+      {/* Expandable Search Input Bar */}
+      {showSearch && (
+        <div className="border-b border-[#222d34] bg-[#161922] px-4 py-2 flex items-center gap-2">
+          <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversation..."
+            className="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 outline-none"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="text-slate-400 hover:text-slate-200"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <span className="text-[10px] text-slate-400 font-mono">
+            {displayedMessages.length} {displayedMessages.length === 1 ? "match" : "matches"}
+          </span>
+        </div>
+      )}
 
       {/* WhatsApp Message Canvas */}
       <div

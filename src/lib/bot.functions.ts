@@ -278,14 +278,19 @@ export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
       }
 
       // Reset bot accumulated profit and stamp last_payout_at to now
-      await supabaseAdmin
+      const nowIso = new Date().toISOString();
+      const { error: updateBotErr } = await supabaseAdmin
         .from("user_active_bots" as any)
         .update({
           profit_accumulated: 0,
-          current_profit: 0,
-          last_payout_at: new Date().toISOString(),
+          last_payout_at: nowIso,
         })
         .eq("id", data.activeBotId);
+
+      if (updateBotErr) {
+        console.error("[Harvest Bot Error] Failed to update user_active_bots:", updateBotErr);
+        throw new Error("Failed to reset accumulated profit: " + updateBotErr.message);
+      }
 
       // Record transaction
       await supabaseAdmin.from("transactions" as any).insert({
@@ -301,6 +306,7 @@ export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
         success: true,
         harvestedAmount: profit,
         timeElapsedLabel: timing.timeSinceLastHarvestLabel,
+        newLastPayoutAt: nowIso,
         message: `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
       };
     } catch (err: any) {
@@ -355,14 +361,19 @@ export const terminateBotServerFn = createServerFn({ method: "POST" })
       }
 
       // Mark bot completed/stopped
-      await supabaseAdmin
+      const { error: termBotErr } = await supabaseAdmin
         .from("user_active_bots" as any)
         .update({
           status: "completed",
           profit_accumulated: 0,
-          current_profit: 0,
+          last_payout_at: new Date().toISOString(),
         })
         .eq("id", data.activeBotId);
+
+      if (termBotErr) {
+        console.error("[Terminate Bot Error]:", termBotErr);
+        throw new Error("Failed to update bot status: " + termBotErr.message);
+      }
 
       // Record transaction
       await supabaseAdmin.from("transactions" as any).insert({
@@ -435,14 +446,18 @@ export const harvestCopyProfitServerFn = createServerFn({ method: "POST" })
       }
 
       const newTierKey = encodeCopyTierKey(a.tier_key || "tier", isDemo, Date.now());
-      await supabaseAdmin
+      const { error: updateCopyErr } = await supabaseAdmin
         .from("user_copy_allocations" as any)
         .update({
           tier_key: newTierKey,
           total_profit: 0,
-          current_profit: 0,
         })
         .eq("id", data.allocationId);
+
+      if (updateCopyErr) {
+        console.error("[Harvest Copy Error]:", updateCopyErr);
+        throw new Error("Failed to reset copy profit: " + updateCopyErr.message);
+      }
 
       await supabaseAdmin.from("transactions" as any).insert({
         user_id: data.userId,
@@ -457,6 +472,7 @@ export const harvestCopyProfitServerFn = createServerFn({ method: "POST" })
         success: true,
         harvestedAmount: profit,
         timeElapsedLabel: timing.timeSinceLastHarvestLabel,
+        newTierKey: newTierKey,
         message: `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
       };
     } catch (err: any) {
@@ -513,10 +529,15 @@ export const terminateCopyAllocationServerFn = createServerFn({ method: "POST" }
           .eq("id", data.userId);
       }
 
-      await supabaseAdmin
+      const { error: termCopyErr } = await supabaseAdmin
         .from("user_copy_allocations" as any)
-        .update({ status: "closed", total_profit: 0, current_profit: 0 })
+        .update({ status: "closed", total_profit: 0 })
         .eq("id", data.allocationId);
+
+      if (termCopyErr) {
+        console.error("[Terminate Copy Error]:", termCopyErr);
+        throw new Error("Failed to close copy allocation: " + termCopyErr.message);
+      }
 
       await supabaseAdmin.from("transactions" as any).insert({
         user_id: data.userId,

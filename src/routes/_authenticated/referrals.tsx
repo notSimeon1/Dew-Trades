@@ -55,6 +55,17 @@ function ReferralsPage() {
   useEffect(() => {
     if (typeof window !== "undefined") setOrigin(window.location.origin);
   }, []);
+
+  // Persist referral code to database if user profile has none yet
+  useEffect(() => {
+    if (user?.id && profile && !profile.referral_code && fallbackCode) {
+      supabase
+        .from("profiles")
+        .update({ referral_code: fallbackCode })
+        .eq("id", user.id)
+        .then(() => {});
+    }
+  }, [user?.id, profile, fallbackCode]);
   const link = origin && code ? `${origin}/auth?ref=${code}` : "";
   const total = (earnings ?? []).reduce((s: number, r: any) => s + Number(r?.amount ?? 0), 0);
 

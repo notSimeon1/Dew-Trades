@@ -34,6 +34,7 @@ import {
   Bot,
   ChartBar as BarChart3,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";

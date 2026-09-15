@@ -1278,6 +1278,37 @@ export async function adminClearAllBalances(userId: string) {
   };
 }
 
+export async function adminResetSupportChats(userId: string) {
+  await assertOwner(userId);
+
+  // 1. Delete all support messages using elevated service role
+  const { error: msgErr } = await supabaseAdmin
+    .from("support_messages")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (msgErr) {
+    console.error("[adminResetSupportChats] support_messages delete error:", msgErr);
+    throw new Error(msgErr.message);
+  }
+
+  // 2. Delete all support threads using elevated service role
+  const { error: threadErr } = await supabaseAdmin
+    .from("support_threads")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (threadErr) {
+    console.error("[adminResetSupportChats] support_threads delete error:", threadErr);
+    throw new Error(threadErr.message);
+  }
+
+  return {
+    ok: true,
+    message: "All customer support chats and threads have been completely reset.",
+  };
+}
+
 // Make deposit/withdrawal functions use dynamic rates from platform_settings
 // These are exported so the server fns above can call them too.
 export { getPlatformNumeric };

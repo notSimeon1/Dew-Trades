@@ -24,6 +24,7 @@ import {
   updateAdminComplaint,
   updateAdminSetting,
   deleteAdminSetting,
+  resetAdminSupportChats,
 } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -92,6 +93,25 @@ import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine"
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
 const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
 
+function safeOpenUrl(url: string) {
+  if (!url) return;
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+      } catch {}
+    }, 200);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
@@ -152,7 +172,8 @@ function AdminPage() {
     queryKey: ["admin_overview", user?.id],
     queryFn: () => fetchOverview(),
     enabled: isAdmin === true,
-    refetchInterval: 6000,
+    refetchInterval: 15000,
+    staleTime: 10000,
     retry: false,
   });
 
@@ -173,39 +194,63 @@ function AdminPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="bg-morph relative overflow-hidden rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant">
-        <div className="flex items-center gap-3">
-          <motion.div
-            animate={{ rotate: [0, 8, -6, 0] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-hero shadow-glow"
-          >
-            <Shield className="h-5 w-5 text-primary-foreground" />
-          </motion.div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight shimmer-text">Admin control center</h1>
-            <p className="text-sm text-muted-foreground">
-              Approvals, balances, charts and wallet settings.
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  wsStatus === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-                }`}
-              />
-              <span className="font-semibold text-foreground">Binance WebSocket:</span>
-              <span
-                className={wsStatus === "live" ? "text-emerald-400 font-medium" : "text-amber-400"}
-              >
-                {wsStatus === "live" ? "Live Feed Active" : "Connecting..."}
-              </span>
-              {wsStatus === "live" && tickers["BTCUSDT"]?.price && (
-                <span className="ml-2 font-mono text-[11px] text-muted-foreground hidden sm:inline">
-                  BTC: ${tickers["BTCUSDT"].price.toLocaleString()} · ETH: $
-                  {(tickers["ETHUSDT"]?.price ?? 0).toLocaleString()} · SOL: $
-                  {(tickers["SOLUSDT"]?.price ?? 0).toLocaleString()}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <motion.div
+              animate={{ rotate: [0, 8, -6, 0] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-hero shadow-glow shrink-0"
+            >
+              <Shield className="h-5 w-5 text-primary-foreground" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight shimmer-text">Admin control center</h1>
+              <p className="text-sm text-muted-foreground">
+                Approvals, balances, charts and wallet settings.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    wsStatus === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  }`}
+                />
+                <span className="font-semibold text-foreground">Binance WebSocket:</span>
+                <span
+                  className={wsStatus === "live" ? "text-emerald-400 font-medium" : "text-amber-400"}
+                >
+                  {wsStatus === "live" ? "Live Feed Active" : "Connecting..."}
                 </span>
-              )}
+                {wsStatus === "live" && tickers["BTCUSDT"]?.price && (
+                  <span className="ml-2 font-mono text-[11px] text-muted-foreground hidden sm:inline">
+                    BTC: ${tickers["BTCUSDT"].price.toLocaleString()} · ETH: $
+                    {(tickers["ETHUSDT"]?.price ?? 0).toLocaleString()} · SOL: $
+                    {(tickers["SOLUSDT"]?.price ?? 0).toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await overviewQuery.refetch();
+                  toast.success("Admin overview refreshed");
+                } catch {
+                  toast.error("Failed to refresh admin data");
+                }
+              }}
+              disabled={overviewQuery.isFetching}
+              className="h-9 px-3 text-xs bg-background/50 hover:bg-background"
+            >
+              <RefreshCw
+                className={`mr-1.5 h-3.5 w-3.5 ${overviewQuery.isFetching ? "animate-spin" : ""}`}
+              />
+              {overviewQuery.isFetching ? "Refreshing..." : "Refresh Overview"}
+            </Button>
           </div>
         </div>
       </div>
@@ -455,16 +500,7 @@ function DepositProofsTab({
   const handleViewProof = async (storagePath: string) => {
     if (!storagePath) return;
     if (storagePath.startsWith("http") || storagePath.startsWith("data:")) {
-      const win = window.open();
-      if (win) {
-        if (storagePath.startsWith("data:")) {
-          win.document.write(
-            `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;background:#000;"><img src="${storagePath}" style="max-width:90%;max-height:90vh;border-radius:12px;" /></div>`,
-          );
-        } else {
-          win.location.href = storagePath;
-        }
-      }
+      safeOpenUrl(storagePath);
       return;
     }
 
@@ -473,7 +509,7 @@ function DepositProofsTab({
       .from("deposit-receipts")
       .createSignedUrl(storagePath, 3600);
     if (d1?.signedUrl) {
-      window.open(d1.signedUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(d1.signedUrl);
       return;
     }
 
@@ -482,14 +518,14 @@ function DepositProofsTab({
       .from("support_attachments")
       .createSignedUrl(storagePath, 3600);
     if (d2?.signedUrl) {
-      window.open(d2.signedUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(d2.signedUrl);
       return;
     }
 
     // Fallback to public URL
     const { data: pub } = supabase.storage.from("deposit-receipts").getPublicUrl(storagePath);
     if (pub?.publicUrl) {
-      window.open(pub.publicUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(pub.publicUrl);
       return;
     }
 
@@ -726,35 +762,26 @@ function RequestList({
   const handleViewProof = async (storagePath: string) => {
     if (!storagePath) return;
     if (storagePath.startsWith("http") || storagePath.startsWith("data:")) {
-      const win = window.open();
-      if (win) {
-        if (storagePath.startsWith("data:")) {
-          win.document.write(
-            `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;background:#000;"><img src="${storagePath}" style="max-width:90%;max-height:90vh;border-radius:12px;" /></div>`,
-          );
-        } else {
-          win.location.href = storagePath;
-        }
-      }
+      safeOpenUrl(storagePath);
       return;
     }
     const { data: d1 } = await supabase.storage
       .from("deposit-receipts")
       .createSignedUrl(storagePath, 3600);
     if (d1?.signedUrl) {
-      window.open(d1.signedUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(d1.signedUrl);
       return;
     }
     const { data: d2 } = await supabase.storage
       .from("support_attachments")
       .createSignedUrl(storagePath, 3600);
     if (d2?.signedUrl) {
-      window.open(d2.signedUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(d2.signedUrl);
       return;
     }
     const { data: pub } = supabase.storage.from("deposit-receipts").getPublicUrl(storagePath);
     if (pub?.publicUrl) {
-      window.open(pub.publicUrl, "_blank", "noopener,noreferrer");
+      safeOpenUrl(pub.publicUrl);
       return;
     }
     toast.error("Could not generate proof URL");
@@ -1412,7 +1439,7 @@ function KycTab({
         toast.error("Could not generate document URL");
         return;
       }
-      window.open(res.url, "_blank", "noopener,noreferrer");
+      safeOpenUrl(res.url);
     } catch (err: any) {
       toast.error(err.message ?? "Could not open document");
     }
@@ -2115,6 +2142,7 @@ export function AdminWalletsTab({
   const [walletVals, setWalletVals] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCat, setFilterCat] = useState<"all" | "crypto" | "memo" | "fee" | "custom">("all");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -2150,7 +2178,6 @@ export function AdminWalletsTab({
   };
 
   const handleDelete = async (key: string) => {
-    if (!confirm(`Are you sure you want to remove the wallet setting "${key}"?`)) return;
     setDeletingKey(key);
     try {
       await deleteWallet({ data: { key } });
@@ -2165,6 +2192,7 @@ export function AdminWalletsTab({
       toast.error(err.message ?? "Delete failed");
     } finally {
       setDeletingKey(null);
+      setConfirmDeleteKey(null);
     }
   };
 
@@ -2259,7 +2287,14 @@ export function AdminWalletsTab({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => refetchWallets()}
+              onClick={async () => {
+                try {
+                  await refetchWallets();
+                  toast.success("Wallet settings refreshed");
+                } catch {
+                  toast.error("Failed to refresh wallets");
+                }
+              }}
               disabled={walletsLoading}
               className="text-xs"
             >
@@ -2373,20 +2408,40 @@ export function AdminWalletsTab({
                         </Badge>
                       )}
                       {meta.category === "custom" && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleDelete(meta.key)}
-                          disabled={isDeleting}
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                          title="Delete custom key"
-                        >
-                          {isDeleting ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
+                        confirmDeleteKey === meta.key ? (
+                          <div className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded px-1 py-0.5 animate-in fade-in">
+                            <span className="text-[10px] text-destructive font-medium">Delete?</span>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDelete(meta.key)}
+                              disabled={isDeleting}
+                              className="h-5 px-1.5 text-[10px] font-bold bg-rose-600 hover:bg-rose-500"
+                            >
+                              {isDeleting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Yes"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmDeleteKey(null)}
+                              disabled={isDeleting}
+                              className="h-5 px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setConfirmDeleteKey(meta.key)}
+                            disabled={isDeleting}
+                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                            title="Delete custom key"
+                          >
                             <Trash2 className="h-3 w-3" />
-                          )}
-                        </Button>
+                          </Button>
+                        )
                       )}
                     </div>
                   </div>
@@ -3228,6 +3283,7 @@ function AdminSignalsTab({ tickers }: { tickers?: Record<string, Ticker> }) {
 }
 
 function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
+  const clearSupportServer = useServerFn(resetAdminSupportChats);
   const [threads, setThreads] = useState<any[]>([]);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -3235,6 +3291,8 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
   const activeIdRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [clearing, setClearing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [confirmResetSupport, setConfirmResetSupport] = useState(false);
 
   // Sync activeIdRef whenever activeId state changes
   useEffect(() => {
@@ -3348,30 +3406,48 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
     };
   }, []);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadThreads();
+      toast.success("Support threads refreshed");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to refresh support threads");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleClearAllSupport = async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to reset and clear ALL customer support chats? This starts support completely fresh.",
-      )
-    )
-      return;
     setClearing(true);
     try {
-      await supabase
-        .from("support_messages")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase
-        .from("support_threads")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-      toast.success("All support chats have been reset cleanly!");
+      const res = await clearSupportServer();
+      toast.success(res?.message ?? "All support chats have been reset cleanly!");
       setThreads([]);
       setActiveId(null);
       activeIdRef.current = null;
+      setConfirmResetSupport(false);
       await loadThreads();
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to clear support chats");
+      // Fallback to direct client deletion if server fn encounters issue
+      try {
+        await supabase
+          .from("support_messages")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+        await supabase
+          .from("support_threads")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+        toast.success("All support chats have been reset cleanly!");
+        setThreads([]);
+        setActiveId(null);
+        activeIdRef.current = null;
+        setConfirmResetSupport(false);
+        await loadThreads();
+      } catch (clientErr: any) {
+        toast.error(e?.message ?? clientErr?.message ?? "Failed to clear support chats");
+      }
     } finally {
       setClearing(false);
     }
@@ -3428,24 +3504,53 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
         </div>
 
         {/* Control Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             size="sm"
             variant="ghost"
             className="h-8 px-2.5 text-xs text-slate-300 hover:text-white hover:bg-[#2a3942]"
-            onClick={loadThreads}
+            disabled={refreshing}
+            onClick={handleRefresh}
           >
-            Refresh
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="h-8 px-2.5 text-xs font-semibold"
-            disabled={clearing}
-            onClick={handleClearAllSupport}
-          >
-            {clearing ? "Clearing..." : "Reset All"}
-          </Button>
+
+          {!confirmResetSupport ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-8 px-2.5 text-xs font-semibold"
+              disabled={clearing}
+              onClick={() => setConfirmResetSupport(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Reset All
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-600/60 rounded-lg px-2 py-1 shadow-lg animate-in fade-in">
+              <span className="text-[11px] text-rose-200 font-medium">Reset all chats?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 px-2 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white"
+                disabled={clearing}
+                onClick={handleClearAllSupport}
+              >
+                {clearing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                {clearing ? "Clearing..." : "Confirm"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-1.5 text-[11px] text-slate-300 hover:text-white"
+                disabled={clearing}
+                onClick={() => setConfirmResetSupport(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

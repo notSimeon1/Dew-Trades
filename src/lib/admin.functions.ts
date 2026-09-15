@@ -14,6 +14,7 @@ import {
   adminPostNews,
   adminReconcileLedger,
   adminClearAllBalances,
+  adminResetSupportChats,
   adminToggleAiTrading,
   adminToggleAccountMode,
   adminToggleSuspend,
@@ -236,4 +237,8 @@ export const reconcileAdminLedger = createServerFn({ method: "POST" })
 
 export const clearAllAdminBalances = createServerFn({ method: "POST" }).handler(
   async ({ context }) => adminClearAllBalances(context?.userId || "admin"),
+);
+
+export const resetAdminSupportChats = createServerFn({ method: "POST" }).handler(
+  async ({ context }) => adminResetSupportChats(context?.userId || "admin"),
 );

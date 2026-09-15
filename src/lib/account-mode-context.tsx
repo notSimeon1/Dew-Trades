@@ -51,25 +51,20 @@ const AccountModeContext = createContext<AccountModeContextValue>({
 export function AccountModeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [mode, setMode] = useState<AccountMode>("demo");
-  const [fiatLiveBalance, setFiatLiveBalance] = useState(0);
-  const [cryptoBalance, setCryptoBalance] = useState(0);
-  const [liveBalance, setLiveBalance] = useState(0);
-  const [demoBalance, setDemoBalance] = useState(10000);
-  const [cryptoAssets, setCryptoAssets] = useState<EnrichedAsset[]>([]);
+
+  const [rawProfile, setRawProfile] = useState<any>(null);
+  const [rawCryptoRows, setRawCryptoRows] = useState<{ asset_symbol: string; balance: number }[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
 
   const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
 
-  // Fetch user balances (fiat + crypto assets directly matching Assets ledger)
-  const fetchAllBalances = useCallback(async () => {
+  // Fetch user database balances strictly when DB changes, NOT on every price tick
+  const fetchDbBalances = useCallback(async () => {
     if (!user) {
-      setMode("demo");
-      setFiatLiveBalance(0);
-      setCryptoBalance(0);
-      setLiveBalance(0);
-      setDemoBalance(10000);
-      setCryptoAssets([]);
+      setRawProfile(null);
+      setRawCryptoRows([]);
       setLoading(false);
       return;
     }
@@ -79,7 +74,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         supabase
           .from("profiles")
           .select(
-            "account_mode, live_balance, account_balance, available_cash, demo_balance, crypto_balances",
+            "id, account_mode, live_balance, account_balance, available_cash, demo_balance, crypto_balances",
           )
           .eq("id", user.id)
           .maybeSingle(),
@@ -89,57 +84,31 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           .eq("user_id", user.id),
       ]);
 
-      const prof = profRes.data;
-      const cryptoRows = cryptoRes.data;
-
-      const fiatLive = Number(
-        prof?.available_cash ?? prof?.live_balance ?? prof?.account_balance ?? 0,
-      );
-      const demo = Number(prof?.demo_balance ?? 10000);
-
-      // Compute identical crypto valuation as Assets page using unified helper
-      const { assets, totalCryptoUsd } = computeEnrichedCryptoAssets(
-        cryptoRows,
-        (prof?.crypto_balances ?? {}) as Record<string, number>,
-        tickers,
-      );
-
-      let m = (prof?.account_mode as AccountMode) ?? "demo";
-      if (!prof?.account_mode || (m === "demo" && (fiatLive > 0 || totalCryptoUsd > 0))) {
-        m = fiatLive > 0 || totalCryptoUsd > 0 ? "live" : "demo";
-      }
-
-      const totalLive = Number((fiatLive + totalCryptoUsd).toFixed(2));
-
-      setMode(m);
-      setFiatLiveBalance(Number(fiatLive.toFixed(2)));
-      setCryptoBalance(totalCryptoUsd);
-      setCryptoAssets(assets);
-      setLiveBalance(totalLive);
-      setDemoBalance(demo);
+      setRawProfile(profRes.data ?? null);
+      setRawCryptoRows((cryptoRes.data as any[]) ?? []);
     } catch (err) {
       console.error("[AccountModeProvider] fetch error:", err);
     } finally {
       setLoading(false);
     }
-  }, [user, tickers]);
+  }, [user]);
 
   useEffect(() => {
-    fetchAllBalances();
-  }, [fetchAllBalances]);
+    fetchDbBalances();
+  }, [fetchDbBalances]);
 
-  // Realtime subscriptions for profiles & user_crypto_balances
+  // Persistent Realtime subscription for profiles & user_crypto_balances (stable, never recreated on price ticks)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
-    const channelName = `acc_mode_${user.id}_${Date.now()}`;
+    const channelName = `acc_mode_${user.id}`;
     const channel = supabase
       .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
         () => {
-          fetchAllBalances();
+          fetchDbBalances();
           qc.invalidateQueries({ queryKey: ["profile", user.id] });
           qc.invalidateQueries({ queryKey: ["profile"] });
         },
@@ -153,7 +122,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          fetchAllBalances();
+          fetchDbBalances();
           qc.invalidateQueries({ queryKey: ["my_crypto_wallets", user.id] });
           qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
         },
@@ -163,46 +132,82 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchAllBalances, qc]);
+  }, [user?.id, fetchDbBalances, qc]);
 
-  const switchMode = async (next: AccountMode) => {
-    if (!user || next === mode) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({ account_mode: next, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
-    if (error) {
-      toast.error(error.message);
-      return;
+  // Real-time valuation derived via useMemo from raw rows & throttled prices
+  const { cryptoAssets, cryptoBalance } = useMemo(() => {
+    const { assets, totalCryptoUsd } = computeEnrichedCryptoAssets(
+      rawCryptoRows,
+      (rawProfile?.crypto_balances ?? {}) as Record<string, number>,
+      tickers,
+    );
+    return { cryptoAssets: assets, cryptoBalance: totalCryptoUsd };
+  }, [rawCryptoRows, rawProfile?.crypto_balances, tickers]);
+
+  const fiatLiveBalance = Number(
+    rawProfile?.available_cash ?? rawProfile?.live_balance ?? rawProfile?.account_balance ?? 0,
+  );
+  const demoBalance = Number(rawProfile?.demo_balance ?? 10000);
+  const liveBalance = Number((fiatLiveBalance + cryptoBalance).toFixed(2));
+
+  const mode: AccountMode = useMemo(() => {
+    if (rawProfile?.account_mode === "live" || rawProfile?.account_mode === "demo") {
+      return rawProfile.account_mode;
     }
-    setMode(next);
-    toast.success(`Switched to ${next.toUpperCase()} account`);
-    qc.invalidateQueries({ queryKey: ["profile"] });
-    qc.invalidateQueries({ queryKey: ["profile", user.id] });
-    qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
-  };
+    return fiatLiveBalance > 0 || cryptoBalance > 0 ? "live" : "demo";
+  }, [rawProfile?.account_mode, fiatLiveBalance, cryptoBalance]);
 
   const balance = mode === "live" ? liveBalance : demoBalance;
 
-  return (
-    <AccountModeContext.Provider
-      value={{
-        mode,
-        balance,
-        liveBalance,
-        fiatLiveBalance,
-        cashBalance: fiatLiveBalance,
-        cryptoBalance,
-        demoBalance,
-        cryptoAssets,
-        switchMode,
-        loading,
-        refreshBalances: fetchAllBalances,
-      }}
-    >
-      {children}
-    </AccountModeContext.Provider>
+  const switchMode = useCallback(
+    async (next: AccountMode) => {
+      if (!user?.id || next === mode) return;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ account_mode: next, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setRawProfile((prev: any) => (prev ? { ...prev, account_mode: next } : prev));
+      toast.success(`Switched to ${next.toUpperCase()} account`);
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
+    },
+    [user?.id, mode, qc],
   );
+
+  const contextValue = useMemo(
+    () => ({
+      mode,
+      balance,
+      liveBalance,
+      fiatLiveBalance,
+      cashBalance: fiatLiveBalance,
+      cryptoBalance,
+      demoBalance,
+      cryptoAssets,
+      switchMode,
+      loading,
+      refreshBalances: fetchDbBalances,
+    }),
+    [
+      mode,
+      balance,
+      liveBalance,
+      fiatLiveBalance,
+      cryptoBalance,
+      demoBalance,
+      cryptoAssets,
+      switchMode,
+      loading,
+      fetchDbBalances,
+    ],
+  );
+
+  return <AccountModeContext.Provider value={contextValue}>{children}</AccountModeContext.Provider>;
 }
 
 export function useAccountMode() {

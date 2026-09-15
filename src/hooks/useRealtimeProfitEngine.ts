@@ -50,7 +50,8 @@ export function useRealtimeProfitEngine() {
           const computedProfit = timing.totalProfit;
           const currentStored = Number(bot.profit_accumulated ?? 0);
 
-          if (Math.abs(computedProfit - currentStored) >= 0.01) {
+          // Only sync to DB if profit has grown by at least $0.50 since last DB write
+          if (Math.abs(computedProfit - currentStored) >= 0.5) {
             return supabase
               .from("user_active_bots")
               .update({
@@ -65,7 +66,7 @@ export function useRealtimeProfitEngine() {
           const computedProfit = timing.totalProfit;
           const currentStored = Number(alloc.total_profit ?? 0);
 
-          if (Math.abs(computedProfit - currentStored) >= 0.01) {
+          if (Math.abs(computedProfit - currentStored) >= 0.5) {
             return supabase
               .from("user_copy_allocations")
               .update({
@@ -81,7 +82,7 @@ export function useRealtimeProfitEngine() {
       } finally {
         isRunning = false;
       }
-    }, 15000);
+    }, 120000); // Relaxed to 2 minutes background sync (client UI computes live seconds-level profit directly)
 
     return () => clearInterval(interval);
   }, [user, qc]);
