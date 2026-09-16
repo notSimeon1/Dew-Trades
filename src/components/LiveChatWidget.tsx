@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { MessageCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { markSupportMessagesRead } from "@/lib/admin.functions";
 import { useAuth } from "@/lib/auth-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import { getOrCreateUserSupportThread } from "@/lib/support-service";
@@ -91,6 +93,16 @@ export function LiveChatWidget() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const markReadFn = useServerFn(markSupportMessagesRead);
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+    if (open && threadId) {
+      setUnread(0);
+      markReadFn({ data: { threadId, role: "user" } }).catch(() => {});
+    }
+  }, [open, threadId, markReadFn]);
+
   // Ensure support thread exists and listen for unread messages
   useEffect(() => {
     if (!user) return;
@@ -104,32 +116,62 @@ export function LiveChatWidget() {
         if (!isMounted || !thread) return;
         setThreadId(thread.id);
 
-        // Calculate unread count
+        // Calculate initial unread count
         const { data: msgs } = await supabase
           .from("support_messages")
           .select("id, sender, is_read")
           .eq("thread_id", thread.id);
 
         if (isMounted) {
-          const count = (msgs ?? []).filter((m: any) => m.sender !== "user" && !m.is_read).length;
+          const count = openRef.current
+            ? 0
+            : (msgs ?? []).filter((m: any) => m.sender !== "user" && !m.is_read).length;
           setUnread(count);
+          if (openRef.current && count > 0) {
+            markReadFn({ data: { threadId: thread.id, role: "user" } }).catch(() => {});
+          }
         }
 
-        // Subscribe to incoming messages for live unread badge
+        // Subscribe to incoming messages and read updates for live unread badge
         channel = supabase
           .channel(`widget-unread-${thread.id}`)
           .on(
             "postgres_changes",
             {
-              event: "INSERT",
+              event: "*",
               schema: "public",
               table: "support_messages",
               filter: `thread_id=eq.${thread.id}`,
             },
             (payload: any) => {
-              const newMsg = payload.new;
-              if (newMsg.sender !== "user") {
-                setUnread((prev) => prev + 1);
+              if (!isMounted) return;
+              if (payload.eventType === "INSERT") {
+                const newMsg = payload.new;
+                if (newMsg.sender !== "user") {
+                  if (openRef.current) {
+                    setUnread(0);
+                    markReadFn({ data: { threadId: thread.id, role: "user" } }).catch(() => {});
+                  } else {
+                    setUnread((prev) => prev + 1);
+                  }
+                }
+              } else if (payload.eventType === "UPDATE") {
+                const updated = payload.new;
+                if (updated.is_read) {
+                  supabase
+                    .from("support_messages")
+                    .select("id, sender, is_read")
+                    .eq("thread_id", thread.id)
+                    .then(({ data }) => {
+                      if (isMounted) {
+                        const count = openRef.current
+                          ? 0
+                          : (data ?? []).filter((m: any) => m.sender !== "user" && !m.is_read)
+                              .length;
+                        setUnread(count);
+                      }
+                    });
+                }
               }
             },
           )
@@ -144,11 +186,7 @@ export function LiveChatWidget() {
       isMounted = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [user]);
-
-  useEffect(() => {
-    if (open) setUnread(0);
-  }, [open]);
+  }, [user, markReadFn]);
 
   // Handle pointer down, move, up with 0.5s touch hold delay
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {

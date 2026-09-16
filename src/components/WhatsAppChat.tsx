@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   Send,
   Paperclip,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { markSupportMessagesRead } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -60,6 +62,7 @@ export function WhatsAppChat({
   height = "h-[600px]",
   compact = false,
 }: WhatsAppChatProps) {
+  const markReadFn = useServerFn(markSupportMessagesRead);
   const [messages, setMessages] = useState<SupportMsg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -77,21 +80,38 @@ export function WhatsAppChat({
   // Mark unread messages from opposite party as read
   const markAsRead = useCallback(
     async (msgs: SupportMsg[]) => {
-      const unreadIds = msgs
-        .filter(
-          (m) =>
-            (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user") && !m.is_read,
-        )
-        .map((m) => m.id);
+      const hasUnread = msgs.some(
+        (m) =>
+          (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user") && !m.is_read,
+      );
 
-      if (unreadIds.length > 0) {
-        await supabase
-          .from("support_messages")
-          .update({ is_read: true } as never)
-          .in("id", unreadIds);
+      if (hasUnread && threadId) {
+        // Optimistically mark local messages as read
+        setMessages((prev) =>
+          prev.map((m) =>
+            (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user")
+              ? { ...m, is_read: true }
+              : m,
+          ),
+        );
+        try {
+          await markReadFn({
+            data: {
+              threadId,
+              role: currentUserRole === "user" ? "user" : "admin",
+            },
+          });
+        } catch {
+          // Fallback client update
+          await supabase
+            .from("support_messages")
+            .update({ is_read: true } as never)
+            .eq("thread_id", threadId)
+            .eq("is_read", false);
+        }
       }
     },
-    [currentUserRole],
+    [currentUserRole, threadId, markReadFn],
   );
 
   // Fetch messages and subscribe to realtime + poller
@@ -128,16 +148,20 @@ export function WhatsAppChat({
         (payload: any) => {
           if (payload.eventType === "INSERT") {
             const m = payload.new as SupportMsg;
+            const isOpposite =
+              currentUserRole === "user" ? m.sender !== "user" : m.sender === "user";
             setMessages((prev) => {
               const filtered = prev.filter((x) => !x.id.startsWith("temp-") || x.body !== m.body);
               if (filtered.some((x) => x.id === m.id)) return filtered;
-              return [...filtered, m];
+              return [...filtered, isOpposite ? { ...m, is_read: true } : m];
             });
-            if (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user") {
-              supabase
-                .from("support_messages")
-                .update({ is_read: true } as never)
-                .eq("id", m.id);
+            if (isOpposite) {
+              markReadFn({
+                data: {
+                  threadId,
+                  role: currentUserRole === "user" ? "user" : "admin",
+                },
+              }).catch(() => {});
             }
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as SupportMsg;

@@ -167,7 +167,7 @@ function BotCard({
   mode: "demo" | "live";
 }) {
   const { user } = useAuth();
-  const { fiatLiveBalance } = useAccountMode();
+  const { fiatLiveBalance, refreshBalances } = useAccountMode();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(bot.capital_required));
@@ -251,6 +251,8 @@ function BotCard({
       if (res) {
         if (res.success) {
           toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
+          await refreshBalances();
+          window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
           qc.invalidateQueries({ queryKey: ["my_active_bots"] });
           qc.invalidateQueries({ queryKey: ["profile"] });
           qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -537,6 +539,7 @@ function BotCard({
 
 function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
   const qc = useQueryClient();
+  const { refreshBalances, applyOptimisticBalance } = useAccountMode();
   const [harvesting, setHarvesting] = useState(false);
   const [settling, setSettling] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -564,6 +567,11 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
       return;
     }
     setHarvesting(true);
+    // Optimistically bump balance immediately with zero visual lag
+    applyOptimisticBalance({
+      liveDelta: bot.account_mode === "live" ? profit : 0,
+      demoDelta: bot.account_mode === "demo" ? profit : 0,
+    });
     try {
       const res = await harvestBotProfitServerFn({
         data: { userId, activeBotId: bot.id },
@@ -580,14 +588,18 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
             b.id === bot.id ? { ...b, profit_accumulated: 0, last_payout_at: newIso } : b,
           );
         });
-        await qc.invalidateQueries({ queryKey: ["my_active_bots"] });
-        await qc.invalidateQueries({ queryKey: ["profile"] });
-        await qc.invalidateQueries({ queryKey: ["transactions"] });
+        await refreshBalances();
+        window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
+        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
       } else {
         toast.error(res?.message ?? "Harvest failed");
+        await refreshBalances();
       }
     } catch (err: any) {
       toast.error(err?.message ?? "Harvest error");
+      await refreshBalances();
     } finally {
       setHarvesting(false);
     }
@@ -604,6 +616,8 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
         soundFX.triggerHaptic(40);
         toast.success(res.message);
         setConfirmOpen(false);
+        await refreshBalances();
+        window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
         qc.invalidateQueries({ queryKey: ["my_active_bots"] });
         qc.invalidateQueries({ queryKey: ["profile"] });
         qc.invalidateQueries({ queryKey: ["transactions"] });

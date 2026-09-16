@@ -24,6 +24,7 @@ import {
   adminDeleteSetting,
   closeUserPosition,
   openUserPosition,
+  markSupportThreadRead,
 } from "./admin.server";
 
 const decisionSchema = z.object({
@@ -242,3 +243,12 @@ export const clearAllAdminBalances = createServerFn({ method: "POST" }).handler(
 export const resetAdminSupportChats = createServerFn({ method: "POST" }).handler(
   async ({ context }) => adminResetSupportChats(context?.userId || "admin"),
 );
+
+const markReadSchema = z.object({
+  threadId: z.string().uuid(),
+  role: z.enum(["user", "admin"]),
+});
+
+export const markSupportMessagesRead = createServerFn({ method: "POST" })
+  .inputValidator((input) => markReadSchema.parse(input))
+  .handler(async ({ data }) => markSupportThreadRead(data.threadId, data.role));

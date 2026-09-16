@@ -1309,6 +1309,32 @@ export async function adminResetSupportChats(userId: string) {
   };
 }
 
+export async function markSupportThreadRead(threadId: string, role: "user" | "admin") {
+  if (!threadId) return { ok: false };
+  try {
+    let query = supabaseAdmin
+      .from("support_messages")
+      .update({ is_read: true })
+      .eq("thread_id", threadId)
+      .eq("is_read", false);
+
+    if (role === "user") {
+      query = query.neq("sender", "user");
+    } else {
+      query = query.eq("sender", "user");
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.warn("[markSupportThreadRead] update error:", error);
+    }
+    return { ok: !error };
+  } catch (err) {
+    console.error("[markSupportThreadRead] exception:", err);
+    return { ok: false };
+  }
+}
+
 // Make deposit/withdrawal functions use dynamic rates from platform_settings
 // These are exported so the server fns above can call them too.
 export { getPlatformNumeric };

@@ -35,6 +35,7 @@ export function useRealtimeSync() {
             }
           });
           pendingKeysRef.current.clear();
+          window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
         }, 500);
       }
     };

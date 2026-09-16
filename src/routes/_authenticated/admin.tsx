@@ -25,6 +25,7 @@ import {
   updateAdminSetting,
   deleteAdminSetting,
   resetAdminSupportChats,
+  markSupportMessagesRead,
 } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -105,7 +106,9 @@ function safeOpenUrl(url: string) {
     setTimeout(() => {
       try {
         document.body.removeChild(a);
-      } catch {}
+      } catch {
+        /* ignore cleanup error */
+      }
     }, 200);
   } catch {
     window.open(url, "_blank", "noopener,noreferrer");
@@ -204,7 +207,9 @@ function AdminPage() {
               <Shield className="h-5 w-5 text-primary-foreground" />
             </motion.div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight shimmer-text">Admin control center</h1>
+              <h1 className="text-3xl font-bold tracking-tight shimmer-text">
+                Admin control center
+              </h1>
               <p className="text-sm text-muted-foreground">
                 Approvals, balances, charts and wallet settings.
               </p>
@@ -216,7 +221,9 @@ function AdminPage() {
                 />
                 <span className="font-semibold text-foreground">Binance WebSocket:</span>
                 <span
-                  className={wsStatus === "live" ? "text-emerald-400 font-medium" : "text-amber-400"}
+                  className={
+                    wsStatus === "live" ? "text-emerald-400 font-medium" : "text-amber-400"
+                  }
                 >
                   {wsStatus === "live" ? "Live Feed Active" : "Connecting..."}
                 </span>
@@ -2407,10 +2414,12 @@ export function AdminWalletsTab({
                           Empty
                         </Badge>
                       )}
-                      {meta.category === "custom" && (
-                        confirmDeleteKey === meta.key ? (
+                      {meta.category === "custom" &&
+                        (confirmDeleteKey === meta.key ? (
                           <div className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded px-1 py-0.5 animate-in fade-in">
-                            <span className="text-[10px] text-destructive font-medium">Delete?</span>
+                            <span className="text-[10px] text-destructive font-medium">
+                              Delete?
+                            </span>
                             <Button
                               size="sm"
                               variant="destructive"
@@ -2418,7 +2427,11 @@ export function AdminWalletsTab({
                               disabled={isDeleting}
                               className="h-5 px-1.5 text-[10px] font-bold bg-rose-600 hover:bg-rose-500"
                             >
-                              {isDeleting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Yes"}
+                              {isDeleting ? (
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              ) : (
+                                "Yes"
+                              )}
                             </Button>
                             <Button
                               size="sm"
@@ -2441,8 +2454,7 @@ export function AdminWalletsTab({
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
-                        )
-                      )}
+                        ))}
                     </div>
                   </div>
 
@@ -3284,6 +3296,7 @@ function AdminSignalsTab({ tickers }: { tickers?: Record<string, Ticker> }) {
 
 function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
   const clearSupportServer = useServerFn(resetAdminSupportChats);
+  const markReadServer = useServerFn(markSupportMessagesRead);
   const [threads, setThreads] = useState<any[]>([]);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -3297,7 +3310,11 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
   // Sync activeIdRef whenever activeId state changes
   useEffect(() => {
     activeIdRef.current = activeId;
-  }, [activeId]);
+    if (activeId) {
+      setUnreadCounts((prev) => ({ ...prev, [activeId]: 0 }));
+      markReadServer({ data: { threadId: activeId, role: "admin" } }).catch(() => {});
+    }
+  }, [activeId, markReadServer]);
 
   // Sync users from overviewUsers whenever prop updates
   useEffect(() => {
@@ -3369,6 +3386,12 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
         (unreads ?? []).forEach((m: any) => {
           counts[m.thread_id] = (counts[m.thread_id] || 0) + 1;
         });
+        if (activeIdRef.current) {
+          counts[activeIdRef.current] = 0;
+          markReadServer({ data: { threadId: activeIdRef.current, role: "admin" } }).catch(
+            () => {},
+          );
+        }
         setUnreadCounts(counts);
       } else {
         setUnreadCounts({});
@@ -3587,6 +3610,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                       setActiveId(t.id);
                       activeIdRef.current = t.id;
                       setUnreadCounts((prev) => ({ ...prev, [t.id]: 0 }));
+                      markReadServer({ data: { threadId: t.id, role: "admin" } }).catch(() => {});
                     }}
                     className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center gap-2.5 min-w-0 ${
                       isSelected

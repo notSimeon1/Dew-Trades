@@ -32,6 +32,12 @@ type AccountModeContextValue = {
   switchMode: (next: AccountMode) => Promise<void>;
   loading: boolean;
   refreshBalances: () => Promise<void>;
+  applyOptimisticBalance: (params: {
+    liveDelta?: number;
+    demoDelta?: number;
+    newLiveBalance?: number;
+    newDemoBalance?: number;
+  }) => void;
 };
 
 const AccountModeContext = createContext<AccountModeContextValue>({
@@ -46,6 +52,7 @@ const AccountModeContext = createContext<AccountModeContextValue>({
   switchMode: async () => {},
   loading: true,
   refreshBalances: async () => {},
+  applyOptimisticBalance: () => {},
 });
 
 export function AccountModeProvider({ children }: { children: ReactNode }) {
@@ -60,7 +67,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
 
   const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
 
-  // Fetch user database balances strictly when DB changes, NOT on every price tick
+  // Fetch user database balances strictly when DB changes or when triggered
   const fetchDbBalances = useCallback(async () => {
     if (!user) {
       setRawProfile(null);
@@ -84,8 +91,12 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           .eq("user_id", user.id),
       ]);
 
-      setRawProfile(profRes.data ?? null);
-      setRawCryptoRows((cryptoRes.data as any[]) ?? []);
+      if (profRes.data) {
+        setRawProfile(profRes.data);
+      }
+      if (cryptoRes.data) {
+        setRawCryptoRows(cryptoRes.data as any[]);
+      }
     } catch (err) {
       console.error("[AccountModeProvider] fetch error:", err);
     } finally {
@@ -93,9 +104,96 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const applyOptimisticBalance = useCallback(
+    (params: {
+      liveDelta?: number;
+      demoDelta?: number;
+      newLiveBalance?: number;
+      newDemoBalance?: number;
+    }) => {
+      setRawProfile((prev: any) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        if (typeof params.newLiveBalance === "number") {
+          updated.live_balance = params.newLiveBalance;
+          updated.account_balance = params.newLiveBalance;
+          updated.available_cash = params.newLiveBalance;
+        } else if (typeof params.liveDelta === "number") {
+          const cur = Number(prev.available_cash ?? prev.live_balance ?? prev.account_balance ?? 0);
+          const next = Number((cur + params.liveDelta).toFixed(2));
+          updated.live_balance = next;
+          updated.account_balance = next;
+          updated.available_cash = next;
+        }
+        if (typeof params.newDemoBalance === "number") {
+          updated.demo_balance = params.newDemoBalance;
+        } else if (typeof params.demoDelta === "number") {
+          const cur = Number(prev.demo_balance ?? 10000);
+          updated.demo_balance = Number((cur + params.demoDelta).toFixed(2));
+        }
+        return updated;
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     fetchDbBalances();
   }, [fetchDbBalances]);
+
+  // Listen to custom window balance events and visibility/focus changes
+  useEffect(() => {
+    const handleEvent = () => {
+      fetchDbBalances();
+    };
+
+    window.addEventListener("dewtrades:refresh-balance", handleEvent);
+    window.addEventListener("dewtrades:balance-changed", handleEvent);
+    window.addEventListener("focus", handleEvent);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchDbBalances();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // Fast, lightweight 3.5-second live polling while tab is active
+    const interval = setInterval(() => {
+      if (!document.hidden && user) {
+        fetchDbBalances();
+      }
+    }, 3500);
+
+    return () => {
+      window.removeEventListener("dewtrades:refresh-balance", handleEvent);
+      window.removeEventListener("dewtrades:balance-changed", handleEvent);
+      window.removeEventListener("focus", handleEvent);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(interval);
+    };
+  }, [fetchDbBalances, user]);
+
+  // Hook into TanStack Query Cache to automatically sync balances when related queries invalidate
+  useEffect(() => {
+    const unsubscribe = qc.getQueryCache().subscribe((event) => {
+      if (event?.type === "updated" || event?.type === "invalidated") {
+        const key = event.query?.queryKey?.[0];
+        if (
+          key === "profile" ||
+          key === "my_crypto_wallets" ||
+          key === "transactions" ||
+          key === "my_active_bots" ||
+          key === "my_copy_allocations" ||
+          key === "positions" ||
+          key === "user_profile_navbar"
+        ) {
+          fetchDbBalances();
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [qc, fetchDbBalances]);
 
   // Persistent Realtime subscription for profiles & user_crypto_balances (stable, never recreated on price ticks)
   useEffect(() => {
@@ -192,6 +290,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       switchMode,
       loading,
       refreshBalances: fetchDbBalances,
+      applyOptimisticBalance,
     }),
     [
       mode,
@@ -204,6 +303,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       switchMode,
       loading,
       fetchDbBalances,
+      applyOptimisticBalance,
     ],
   );
 

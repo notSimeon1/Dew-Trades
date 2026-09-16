@@ -134,6 +134,8 @@ function CopyTradingPage() {
 }
 
 function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; index: number }) {
+  const { user } = useAuth();
+  const { mode, refreshBalances } = useAccountMode();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(tier.required_capital));
@@ -228,6 +230,8 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
       }
 
       toast.success(`Copy trading activated with ${tier.tier_name}!`);
+      await refreshBalances();
+      window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
       qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -368,6 +372,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
 
 function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: string }) {
   const qc = useQueryClient();
+  const { refreshBalances, applyOptimisticBalance } = useAccountMode();
   const [harvesting, setHarvesting] = useState(false);
   const [settling, setSettling] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -400,6 +405,11 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
       return;
     }
     setHarvesting(true);
+    // Optimistically update balance immediately for instant visual gratification
+    applyOptimisticBalance({
+      liveDelta: !isDemo ? profit : 0,
+      demoDelta: isDemo ? profit : 0,
+    });
     try {
       const res = await harvestCopyProfitServerFn({
         data: { userId, allocationId: alloc.id },
@@ -418,14 +428,18 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
             a.id === alloc.id ? { ...a, total_profit: 0, tier_key: newKey } : a,
           );
         });
-        await qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
-        await qc.invalidateQueries({ queryKey: ["profile"] });
-        await qc.invalidateQueries({ queryKey: ["transactions"] });
+        await refreshBalances();
+        window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
+        qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
       } else {
         toast.error(res?.message ?? "Harvest failed");
+        await refreshBalances();
       }
     } catch (err: any) {
       toast.error(err?.message ?? "Harvest error");
+      await refreshBalances();
     } finally {
       setHarvesting(false);
     }
@@ -442,6 +456,8 @@ function ActiveCopyAllocationItem({ alloc, userId }: { alloc: any; userId: strin
         soundFX.triggerHaptic(40);
         toast.success(res.message);
         setConfirmOpen(false);
+        await refreshBalances();
+        window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
         qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
         qc.invalidateQueries({ queryKey: ["profile"] });
         qc.invalidateQueries({ queryKey: ["transactions"] });

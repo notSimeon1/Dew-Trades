@@ -1090,8 +1090,10 @@ function TradePanel({
         },
       });
       toast.success(`${side.toUpperCase()} ${asset} @ $${price.toFixed(2)} ($${margin} margin)`);
+      window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
       qc.invalidateQueries({ queryKey: ["positions"] });
       qc.invalidateQueries({ queryKey: ["profile", userId] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["transactions", userId] });
     } catch (err: any) {
       toast.error(err.message ?? "Trade failed");
@@ -1183,8 +1185,10 @@ function LivePositions({
       const result = await closePositionFn({ data: { id: p.id, closePrice: livePrice } });
       const finalPnl = Number(result.pnl ?? pnl);
       toast.success(`Closed ${p.asset} · P&L ${finalPnl >= 0 ? "+" : ""}$${finalPnl.toFixed(2)}`);
+      window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
       qc.invalidateQueries({ queryKey: ["positions"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["profile", userId] });
       qc.invalidateQueries({ queryKey: ["transactions", userId] });
     } catch (err: any) {
       toast.error(err.message ?? "Close failed");
