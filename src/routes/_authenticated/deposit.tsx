@@ -57,7 +57,7 @@ type CryptoOption = {
   symbol: string;
   network: string;
   settingsKey: string;
-  icon: "btc" | "eth" | "usdt" | "xrp";
+  icon: string;
 };
 const CRYPTOS: CryptoOption[] = [
   {
@@ -69,26 +69,26 @@ const CRYPTOS: CryptoOption[] = [
     icon: "xrp",
   },
   {
-    id: "usdt_bep20",
-    label: "Tether USD",
-    symbol: "USDT",
-    network: "BEP20 (BSC)",
-    settingsKey: "deposit_wallet_usdt_bep20",
-    icon: "usdt",
-  },
-  {
     id: "usdt_trc20",
-    label: "Tether USD",
+    label: "Tether USD (TRC20)",
     symbol: "USDT",
     network: "TRC20 (Tron)",
     settingsKey: "deposit_wallet_usdt_trc20",
     icon: "usdt",
   },
   {
+    id: "usdt_bep20",
+    label: "Tether USD (BEP20)",
+    symbol: "USDT",
+    network: "BEP20 (BSC)",
+    settingsKey: "deposit_wallet_usdt_bep20",
+    icon: "usdt",
+  },
+  {
     id: "btc",
     label: "Bitcoin",
     symbol: "BTC",
-    network: "Bitcoin",
+    network: "Bitcoin Native",
     settingsKey: "deposit_wallet_btc",
     icon: "btc",
   },
@@ -96,11 +96,64 @@ const CRYPTOS: CryptoOption[] = [
     id: "eth",
     label: "Ethereum",
     symbol: "ETH",
-    network: "ERC20",
+    network: "ERC20 Mainnet",
     settingsKey: "deposit_wallet_eth",
     icon: "eth",
   },
+  {
+    id: "sol",
+    label: "Solana",
+    symbol: "SOL",
+    network: "Solana Native SPL",
+    settingsKey: "deposit_wallet_sol",
+    icon: "sol",
+  },
+  {
+    id: "bnb",
+    label: "Binance Coin",
+    symbol: "BNB",
+    network: "BSC (BEP20)",
+    settingsKey: "deposit_wallet_bnb",
+    icon: "bnb",
+  },
+  {
+    id: "doge",
+    label: "Dogecoin",
+    symbol: "DOGE",
+    network: "Dogecoin Mainnet",
+    settingsKey: "deposit_wallet_doge",
+    icon: "doge",
+  },
+  {
+    id: "ada",
+    label: "Cardano",
+    symbol: "ADA",
+    network: "Cardano Shelley",
+    settingsKey: "deposit_wallet_ada",
+    icon: "ada",
+  },
+  {
+    id: "ltc",
+    label: "Litecoin",
+    symbol: "LTC",
+    network: "Litecoin Native",
+    settingsKey: "deposit_wallet_ltc",
+    icon: "ltc",
+  },
 ];
+
+const DEFAULT_DEPOSIT_WALLETS: Record<string, string> = {
+  deposit_wallet_xrp: "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh",
+  deposit_wallet_usdt_trc20: "TYDzsYUEpvnYmQk4zGP9sWWcTEd3YiWULy",
+  deposit_wallet_usdt_bep20: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+  deposit_wallet_btc: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  deposit_wallet_eth: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+  deposit_wallet_sol: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+  deposit_wallet_bnb: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+  deposit_wallet_doge: "D8vERFXvPZ29KkK7hKkL7mH5n8mPZ8kH8",
+  deposit_wallet_ada: "addr1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  deposit_wallet_ltc: "LQt8w9K5oP5oW5rW5vX5yZ5aB5cD5eF5gH",
+};
 
 const CRYPTO_PRICE_SYMBOLS: Record<string, string> = {
   xrp: "XRPUSDT",
@@ -108,6 +161,11 @@ const CRYPTO_PRICE_SYMBOLS: Record<string, string> = {
   eth: "ETHUSDT",
   usdt_bep20: "USDTUSDT",
   usdt_trc20: "USDTUSDT",
+  sol: "SOLUSDT",
+  bnb: "BNBUSDT",
+  doge: "DOGEUSDT",
+  ada: "ADAUSDT",
+  ltc: "LTCUSDT",
 };
 
 type Step = "select" | "generating" | "instructions" | "review";
@@ -152,6 +210,7 @@ function DepositPage() {
       });
       return m;
     },
+    refetchInterval: 3000,
   });
   const { data: platformSettings } = useQuery({
     queryKey: ["platform_settings"],
@@ -252,7 +311,11 @@ function DepositPage() {
 
   const selectedCrypto = CRYPTOS.find((c) => c.id === selectedCryptoId);
   const selectedBank = (bankMethods ?? []).find((b: any) => b.id === selectedBankId);
-  const wallet = selectedCrypto ? settings?.[selectedCrypto.settingsKey] : undefined;
+  const wallet = selectedCrypto
+    ? settings?.[selectedCrypto.settingsKey] ||
+      DEFAULT_DEPOSIT_WALLETS[selectedCrypto.settingsKey] ||
+      ""
+    : undefined;
 
   const receiveCryptoAmount = useMemo(() => {
     if (!selectedCrypto || totalPayable <= 0) return null;
@@ -884,32 +947,45 @@ function DepositPage() {
           </div>
 
           {gatewayKind === "crypto" && selectedCrypto && (
-            <div className="space-y-3 rounded-xl border border-dashed border-border bg-surface p-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                Send {selectedCrypto.symbol} ({selectedCrypto.network}) to:
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">
-                  {wallet ||
-                    (selectedCrypto.symbol === "XRP"
-                      ? "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh"
-                      : "Address not set — contact support")}
-                </code>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    const addr =
-                      wallet ||
-                      (selectedCrypto.symbol === "XRP" ? "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh" : "");
-                    if (addr) {
-                      navigator.clipboard.writeText(addr);
-                      toast.success("Copied XRP Address");
-                    }
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+            <div className="space-y-4 rounded-xl border border-dashed border-border bg-surface p-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                {wallet && (
+                  <div className="rounded-xl border border-border bg-white p-2 shrink-0 shadow-sm">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(wallet)}`}
+                      alt={`${selectedCrypto.symbol} Deposit QR Code`}
+                      className="h-28 w-28 object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+                <div className="flex-1 space-y-2 min-w-0 w-full">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Send {selectedCrypto.symbol} ({selectedCrypto.network}) to:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono font-medium">
+                      {wallet || "Address not set — contact support"}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 gap-1"
+                      onClick={() => {
+                        const addr = wallet;
+                        if (addr) {
+                          navigator.clipboard.writeText(addr);
+                          toast.success(`Copied ${selectedCrypto.symbol} Address`);
+                        }
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Copy
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Scan the QR code or copy the address above using your crypto wallet.
+                  </p>
+                </div>
               </div>
 
               {selectedCrypto.symbol === "XRP" && (

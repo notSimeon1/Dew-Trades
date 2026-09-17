@@ -90,6 +90,7 @@ import { motion } from "framer-motion";
 import { useBinancePrices, fetchBinanceLiveCandles, type Ticker } from "@/hooks/useBinancePrices";
 import { TradingChart, type Candle } from "@/components/TradingChart";
 import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine";
+import { computeEnrichedCryptoAssets, CRYPTO_FALLBACK_PRICES } from "@/lib/crypto-assets";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
 const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
@@ -1076,22 +1077,8 @@ function UserRow({
 
   const liveCryptoUsd = useMemo(() => {
     const jsonCrypto = ((user as any)?.crypto_balances ?? {}) as Record<string, number>;
-    let totalUsd = 0;
-    const symbols = Array.from(new Set([...Object.keys(jsonCrypto)]));
-
-    symbols.forEach((sym) => {
-      const symUpper = sym.toUpperCase();
-      const qty = Number(jsonCrypto[sym] ?? 0);
-      if (qty > 0) {
-        const tick = tickers?.[symUpper] || tickers?.[`${symUpper}USDT`];
-        const p = symUpper === "USDT" || symUpper === "USDC" ? 1.0 : (tick?.price ?? 0);
-        if (p > 0) {
-          totalUsd += qty * p;
-        }
-      }
-    });
-
-    return totalUsd > 0 ? totalUsd : Number(user.crypto_usd_balance ?? 0);
+    const { totalCryptoUsd } = computeEnrichedCryptoAssets([], jsonCrypto, tickers);
+    return totalCryptoUsd > 0 ? totalCryptoUsd : Number(user.crypto_usd_balance ?? 0);
   }, [user, tickers]);
 
   const curSymUpper = cryptoSym.toUpperCase();
@@ -2838,15 +2825,12 @@ function AdminBotsTab() {
       const userIds = Array.from(new Set(bots.map((b: any) => b.user_id).filter(Boolean)));
       const { data: userProfiles } =
         userIds.length > 0
-          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          ? await supabase.from("profiles").select("id, full_name").in("id", userIds)
           : { data: [] };
       const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
       return bots.map((b: any) => ({
         ...b,
-        user_email:
-          profileMap.get(b.user_id)?.email ??
-          profileMap.get(b.user_id)?.full_name ??
-          b.user_id?.slice(0, 8),
+        user_email: profileMap.get(b.user_id)?.full_name ?? b.user_id?.slice(0, 8),
       }));
     },
     refetchInterval: 10000,
@@ -2954,15 +2938,12 @@ function AdminCopyTab() {
       const userIds = Array.from(new Set(allocs.map((a: any) => a.user_id).filter(Boolean)));
       const { data: userProfiles } =
         userIds.length > 0
-          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          ? await supabase.from("profiles").select("id, full_name").in("id", userIds)
           : { data: [] };
       const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
       return allocs.map((a: any) => ({
         ...a,
-        user_email:
-          profileMap.get(a.user_id)?.email ??
-          profileMap.get(a.user_id)?.full_name ??
-          a.user_id?.slice(0, 8),
+        user_email: profileMap.get(a.user_id)?.full_name ?? a.user_id?.slice(0, 8),
       }));
     },
     refetchInterval: 10000,
@@ -3066,15 +3047,12 @@ function AdminPreMarketTab({ tickers }: { tickers?: Record<string, Ticker> }) {
       const userIds = Array.from(new Set(allocs.map((a: any) => a.user_id).filter(Boolean)));
       const { data: userProfiles } =
         userIds.length > 0
-          ? await supabase.from("profiles").select("id, email, full_name").in("id", userIds)
+          ? await supabase.from("profiles").select("id, full_name").in("id", userIds)
           : { data: [] };
       const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
       return allocs.map((a: any) => ({
         ...a,
-        user_email:
-          profileMap.get(a.user_id)?.email ??
-          profileMap.get(a.user_id)?.full_name ??
-          a.user_id?.slice(0, 8),
+        user_email: profileMap.get(a.user_id)?.full_name ?? a.user_id?.slice(0, 8),
       }));
     },
     refetchInterval: 10000,
@@ -3311,10 +3289,27 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
   useEffect(() => {
     activeIdRef.current = activeId;
     if (activeId) {
-      setUnreadCounts((prev) => ({ ...prev, [activeId]: 0 }));
+      const activeThread = threads.find((t) => t.id === activeId);
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [activeId]: 0,
+        ...(activeThread?.user_id ? { [activeThread.user_id]: 0 } : {}),
+      }));
       markReadServer({ data: { threadId: activeId, role: "admin" } }).catch(() => {});
     }
-  }, [activeId, markReadServer]);
+  }, [activeId, threads, markReadServer]);
+
+  // Listen to global chat-read events
+  useEffect(() => {
+    const handleRead = (e: any) => {
+      const tid = e?.detail?.threadId;
+      if (tid) {
+        setUnreadCounts((prev) => ({ ...prev, [tid]: 0 }));
+      }
+    };
+    window.addEventListener("dewtrades:chat-read", handleRead);
+    return () => window.removeEventListener("dewtrades:chat-read", handleRead);
+  }, []);
 
   // Sync users from overviewUsers whenever prop updates
   useEffect(() => {
@@ -3378,16 +3373,21 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
         // Load unread counts for support
         const { data: unreads } = await supabase
           .from("support_messages")
-          .select("thread_id, is_read, sender")
+          .select("thread_id, is_read, sender, user_id")
           .eq("sender", "user")
           .eq("is_read", false);
 
         const counts: Record<string, number> = {};
         (unreads ?? []).forEach((m: any) => {
-          counts[m.thread_id] = (counts[m.thread_id] || 0) + 1;
+          if (m.thread_id) counts[m.thread_id] = (counts[m.thread_id] || 0) + 1;
+          if (m.user_id) counts[m.user_id] = (counts[m.user_id] || 0) + 1;
         });
         if (activeIdRef.current) {
           counts[activeIdRef.current] = 0;
+          const activeThread = uniqueThreads.find((t) => t.id === activeIdRef.current);
+          if (activeThread?.user_id) {
+            counts[activeThread.user_id] = 0;
+          }
           markReadServer({ data: { threadId: activeIdRef.current, role: "admin" } }).catch(
             () => {},
           );
@@ -3601,7 +3601,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                     ? `@${u.full_name.toLowerCase().replace(/\s+/g, "")}`
                     : `ID: ${t.user_id.slice(0, 8)}`);
                 const isSelected = activeId === t.id;
-                const unread = unreadCounts[t.id] || 0;
+                const unread = Math.max(unreadCounts[t.id] || 0, unreadCounts[t.user_id] || 0);
 
                 return (
                   <button
@@ -3609,7 +3609,11 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                     onClick={() => {
                       setActiveId(t.id);
                       activeIdRef.current = t.id;
-                      setUnreadCounts((prev) => ({ ...prev, [t.id]: 0 }));
+                      setUnreadCounts((prev) => ({
+                        ...prev,
+                        [t.id]: 0,
+                        [t.user_id]: 0,
+                      }));
                       markReadServer({ data: { threadId: t.id, role: "admin" } }).catch(() => {});
                     }}
                     className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center gap-2.5 min-w-0 ${

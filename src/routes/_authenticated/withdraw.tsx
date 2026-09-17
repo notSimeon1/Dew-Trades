@@ -46,12 +46,13 @@ function WithdrawPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("live_balance, account_balance, available_cash")
+        .select("live_balance, account_balance, available_cash, is_suspended")
         .eq("id", user!.id)
         .maybeSingle();
       return data;
     },
     enabled: !!user,
+    refetchInterval: 3000,
   });
 
   const { data: withdrawals, refetch } = useQuery({
@@ -69,7 +70,7 @@ function WithdrawPage() {
 
   const { fiatLiveBalance, cryptoBalance, liveBalance } = useAccountMode();
   const { formatCurrency } = useCurrency();
-  const available = fiatLiveBalance;
+  const available = Math.max(fiatLiveBalance, liveBalance);
   const fee = Number(amount) * 0.2;
   const net = Number(amount) - fee;
 

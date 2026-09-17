@@ -74,7 +74,13 @@ export function NotificationBell() {
   };
 
   return (
-    <Popover>
+    <Popover
+      onOpenChange={(open) => {
+        if (open && unread > 0) {
+          markAll();
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           className="relative flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"

@@ -62,7 +62,11 @@ function AssetsPage() {
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [convertSymbol, setConvertSymbol] = useState("ALL");
 
-  const { data: wallets, isLoading } = useQuery({
+  const {
+    data: wallets,
+    isLoading,
+    refetch: refetchWallets,
+  } = useQuery({
     queryKey: ["my_crypto_wallets", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -73,10 +77,11 @@ function AssetsPage() {
       return data ?? [];
     },
     enabled: !!user,
-    staleTime: 30000,
+    staleTime: 1500,
+    refetchInterval: 3000,
   });
 
-  const { data: profile } = useQuery({
+  const { data: profile, refetch: refetchProfile } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
@@ -90,8 +95,22 @@ function AssetsPage() {
       return data;
     },
     enabled: !!user,
-    staleTime: 30000,
+    staleTime: 1500,
+    refetchInterval: 3000,
   });
+
+  useEffect(() => {
+    const handleEvent = () => {
+      refetchWallets();
+      refetchProfile();
+    };
+    window.addEventListener("dewtrades:refresh-balance", handleEvent);
+    window.addEventListener("dewtrades:balance-changed", handleEvent);
+    return () => {
+      window.removeEventListener("dewtrades:refresh-balance", handleEvent);
+      window.removeEventListener("dewtrades:balance-changed", handleEvent);
+    };
+  }, [refetchWallets, refetchProfile]);
 
   const mode = (profile as any)?.account_mode as "demo" | "live" | undefined;
   const fiatBalance =

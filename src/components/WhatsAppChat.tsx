@@ -109,6 +109,13 @@ export function WhatsAppChat({
             .eq("thread_id", threadId)
             .eq("is_read", false);
         }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("dewtrades:chat-read", {
+              detail: { threadId, role: currentUserRole },
+            }),
+          );
+        }
       }
     },
     [currentUserRole, threadId, markReadFn],
@@ -162,6 +169,13 @@ export function WhatsAppChat({
                   role: currentUserRole === "user" ? "user" : "admin",
                 },
               }).catch(() => {});
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new CustomEvent("dewtrades:chat-read", {
+                    detail: { threadId, role: currentUserRole },
+                  }),
+                );
+              }
             }
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as SupportMsg;

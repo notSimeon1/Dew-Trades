@@ -95,11 +95,30 @@ export function LiveChatWidget() {
 
   const markReadFn = useServerFn(markSupportMessagesRead);
   const openRef = useRef(open);
+
+  // Listen for global chat-read events
+  useEffect(() => {
+    const handleRead = () => {
+      setUnread(0);
+    };
+    window.addEventListener("dewtrades:chat-read", handleRead);
+    return () => window.removeEventListener("dewtrades:chat-read", handleRead);
+  }, []);
+
   useEffect(() => {
     openRef.current = open;
     if (open && threadId) {
       setUnread(0);
       markReadFn({ data: { threadId, role: "user" } }).catch(() => {});
+      supabase
+        .from("support_messages")
+        .update({ is_read: true } as never)
+        .eq("thread_id", threadId)
+        .eq("is_read", false)
+        .then(() => {});
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("dewtrades:chat-read", { detail: { threadId } }));
+      }
     }
   }, [open, threadId, markReadFn]);
 
@@ -108,6 +127,7 @@ export function LiveChatWidget() {
     if (!user) return;
     let isMounted = true;
     let channel: any = null;
+    let syncInterval: any = null;
 
     (async () => {
       try {
@@ -116,6 +136,10 @@ export function LiveChatWidget() {
         if (!isMounted || !thread) return;
         setThreadId(thread.id);
 
+        const isViewingSupport =
+          openRef.current ||
+          (typeof window !== "undefined" && window.location.pathname === "/support");
+
         // Calculate initial unread count
         const { data: msgs } = await supabase
           .from("support_messages")
@@ -123,14 +147,38 @@ export function LiveChatWidget() {
           .eq("thread_id", thread.id);
 
         if (isMounted) {
-          const count = openRef.current
+          const count = isViewingSupport
             ? 0
             : (msgs ?? []).filter((m: any) => m.sender !== "user" && !m.is_read).length;
           setUnread(count);
-          if (openRef.current && count > 0) {
+          if (
+            isViewingSupport &&
+            (msgs ?? []).some((m: any) => m.sender !== "user" && !m.is_read)
+          ) {
             markReadFn({ data: { threadId: thread.id, role: "user" } }).catch(() => {});
           }
         }
+
+        // Periodic light polling to ensure badge remains accurately synchronized
+        syncInterval = setInterval(async () => {
+          if (document.hidden || !isMounted) return;
+          const viewing =
+            openRef.current ||
+            (typeof window !== "undefined" && window.location.pathname === "/support");
+          if (viewing) {
+            setUnread(0);
+            return;
+          }
+          const { count } = await supabase
+            .from("support_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("thread_id", thread.id)
+            .neq("sender", "user")
+            .eq("is_read", false);
+          if (isMounted && typeof count === "number") {
+            setUnread(count);
+          }
+        }, 4000);
 
         // Subscribe to incoming messages and read updates for live unread badge
         channel = supabase
@@ -145,10 +193,13 @@ export function LiveChatWidget() {
             },
             (payload: any) => {
               if (!isMounted) return;
+              const viewing =
+                openRef.current ||
+                (typeof window !== "undefined" && window.location.pathname === "/support");
               if (payload.eventType === "INSERT") {
                 const newMsg = payload.new;
                 if (newMsg.sender !== "user") {
-                  if (openRef.current) {
+                  if (viewing) {
                     setUnread(0);
                     markReadFn({ data: { threadId: thread.id, role: "user" } }).catch(() => {});
                   } else {
@@ -164,7 +215,7 @@ export function LiveChatWidget() {
                     .eq("thread_id", thread.id)
                     .then(({ data }) => {
                       if (isMounted) {
-                        const count = openRef.current
+                        const count = viewing
                           ? 0
                           : (data ?? []).filter((m: any) => m.sender !== "user" && !m.is_read)
                               .length;
@@ -184,6 +235,7 @@ export function LiveChatWidget() {
 
     return () => {
       isMounted = false;
+      if (syncInterval) clearInterval(syncInterval);
       if (channel) supabase.removeChannel(channel);
     };
   }, [user, markReadFn]);

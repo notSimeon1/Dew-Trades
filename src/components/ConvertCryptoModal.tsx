@@ -149,11 +149,11 @@ export function ConvertCryptoModal({
           await supabase.from("user_crypto_balances").upsert(
             {
               user_id: user.id,
-              asset_symbol: meta.symbol,
+              symbol: meta.symbol,
               balance: 0,
               updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,asset_symbol" },
+            } as any,
+            { onConflict: "user_id,symbol" },
           );
           updatedJson[meta.symbol] = 0;
           updatedJson[meta.symbol.toLowerCase()] = 0;
@@ -164,11 +164,11 @@ export function ConvertCryptoModal({
           await supabase.from("user_crypto_balances").upsert(
             {
               user_id: user.id,
-              asset_symbol: item.symbol,
+              symbol: item.symbol,
               balance: 0,
               updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,asset_symbol" },
+            } as any,
+            { onConflict: "user_id,symbol" },
           );
           updatedJson[item.symbol] = 0;
           updatedJson[item.symbol.toLowerCase()] = 0;

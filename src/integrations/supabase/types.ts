@@ -1120,16 +1120,20 @@ export type Database = {
       };
       user_crypto_balances: {
         Row: {
-          asset_symbol: string;
+          asset_symbol?: string;
           balance: number;
           id: string;
+          locked_balance?: number;
+          symbol: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
-          asset_symbol: string;
+          asset_symbol?: string;
           balance?: number;
           id?: string;
+          locked_balance?: number;
+          symbol: string;
           updated_at?: string;
           user_id: string;
         };
@@ -1137,6 +1141,8 @@ export type Database = {
           asset_symbol?: string;
           balance?: number;
           id?: string;
+          locked_balance?: number;
+          symbol?: string;
           updated_at?: string;
           user_id?: string;
         };

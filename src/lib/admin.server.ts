@@ -299,16 +299,19 @@ export async function adminGetOverview(userId: string) {
   // Fetch all user crypto balances to compute exact crypto USD value for each user
   const { data: allCryptoBalances } = await supabaseAdmin
     .from("user_crypto_balances")
-    .select("user_id, asset_symbol, balance");
+    .select("user_id, symbol, balance");
 
   const cryptoMapByUser = new Map<string, Map<string, number>>();
   (allCryptoBalances ?? []).forEach((row: any) => {
     if (!cryptoMapByUser.has(row.user_id)) {
       cryptoMapByUser.set(row.user_id, new Map());
     }
-    cryptoMapByUser
-      .get(row.user_id)!
-      .set(String(row.asset_symbol).toUpperCase(), Number(row.balance ?? 0));
+    const symKey = String(row.symbol || (row as any).asset_symbol || "")
+      .toUpperCase()
+      .trim();
+    if (symKey) {
+      cryptoMapByUser.get(row.user_id)!.set(symKey, Number(row.balance ?? 0));
+    }
   });
 
   const FALLBACK_PRICES_MAP: Record<string, number> = {
@@ -340,6 +343,7 @@ export async function adminGetOverview(userId: string) {
     ]);
 
     let cryptoUsdVal = 0;
+    const mergedCryptoBalances: Record<string, number> = {};
     allSymbols.forEach((sym) => {
       const symUpper = sym.toUpperCase();
       const qty = Math.max(
@@ -348,6 +352,7 @@ export async function adminGetOverview(userId: string) {
         Number(jsonCrypto[sym] ?? 0),
       );
       if (qty > 0) {
+        mergedCryptoBalances[symUpper] = qty;
         const p = FALLBACK_PRICES_MAP[symUpper] ?? 1.0;
         cryptoUsdVal += qty * p;
       }
@@ -362,6 +367,7 @@ export async function adminGetOverview(userId: string) {
 
     return {
       ...profile,
+      crypto_balances: mergedCryptoBalances,
       full_name: resolvedName,
       email: resolvedEmail,
       country: (profile as any).country ?? "Australia",
@@ -461,7 +467,7 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
           .from("user_crypto_balances")
           .select("balance")
           .eq("user_id", deposit.user_id)
-          .eq("asset_symbol", sym)
+          .eq("symbol", sym)
           .maybeSingle(),
         supabaseAdmin
           .from("profiles")
@@ -479,11 +485,11 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
       await supabaseAdmin.from("user_crypto_balances").upsert(
         {
           user_id: deposit.user_id,
-          asset_symbol: sym,
+          symbol: sym,
           balance: newQty,
           updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,asset_symbol" },
+        } as any,
+        { onConflict: "user_id,symbol" },
       );
 
       // 2. Update profiles.crypto_balances JSONB
@@ -629,7 +635,7 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
         .from("user_crypto_balances")
         .select("balance")
         .eq("user_id", withdrawal.user_id)
-        .eq("asset_symbol", sym)
+        .eq("symbol", sym)
         .maybeSingle();
 
       if (existingBal) {
@@ -638,11 +644,11 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
         await supabaseAdmin.from("user_crypto_balances").upsert(
           {
             user_id: withdrawal.user_id,
-            asset_symbol: sym,
+            symbol: sym,
             balance: newQty,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,asset_symbol" },
+          } as any,
+          { onConflict: "user_id,symbol" },
         );
       }
 
@@ -774,19 +780,21 @@ export async function adminAdjustCryptoBalance(
   const qty = Number(quantity) || 0;
   if (qty <= 0) throw new Error("Invalid quantity specified");
 
-  const [{ data: existingBal }, { data: prof }] = await Promise.all([
-    supabaseAdmin
-      .from("user_crypto_balances")
-      .select("balance")
-      .eq("user_id", targetUserId)
-      .eq("asset_symbol", sym)
-      .maybeSingle(),
+  const [{ data: userCryptoRows }, { data: prof }] = await Promise.all([
+    supabaseAdmin.from("user_crypto_balances").select("*").eq("user_id", targetUserId),
     supabaseAdmin.from("profiles").select("crypto_balances").eq("id", targetUserId).maybeSingle(),
   ]);
 
+  const existingRow = (userCryptoRows ?? []).find(
+    (r: any) =>
+      String(r.symbol || r.asset_symbol || "")
+        .toUpperCase()
+        .trim() === sym,
+  );
+
   const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
   const jsonQty = Number(currentJson[sym] ?? currentJson[sym.toLowerCase()] ?? 0);
-  const rowQty = Number(existingBal?.balance ?? 0);
+  const rowQty = Number(existingRow?.balance ?? (existingRow as any)?.amount ?? 0);
   const currentQty = Math.max(rowQty, jsonQty);
 
   if (direction === "debit" && currentQty < qty) {
@@ -796,36 +804,85 @@ export async function adminAdjustCryptoBalance(
   const delta = direction === "credit" ? qty : -qty;
   const newQty = Number(Math.max(0, currentQty + delta).toFixed(6));
 
-  // 1. Upsert user_crypto_balances
-  await supabaseAdmin.from("user_crypto_balances").upsert(
-    {
+  // 1. Update or Insert in user_crypto_balances table
+  if (existingRow?.id) {
+    const { error: updateErr } = await supabaseAdmin
+      .from("user_crypto_balances")
+      .update({
+        balance: newQty,
+        symbol: sym,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", existingRow.id);
+
+    if (updateErr) {
+      console.warn("[adminAdjustCryptoBalance] update error:", updateErr);
+      await supabaseAdmin
+        .from("user_crypto_balances")
+        .update({ balance: newQty } as any)
+        .eq("id", existingRow.id);
+    }
+  } else {
+    const { error: insertErr } = await supabaseAdmin.from("user_crypto_balances").insert({
       user_id: targetUserId,
-      asset_symbol: sym,
+      symbol: sym,
       balance: newQty,
       updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,asset_symbol" },
-  );
+    } as any);
+
+    if (insertErr) {
+      console.warn("[adminAdjustCryptoBalance] insert error, falling back to upsert:", insertErr);
+      await supabaseAdmin.from("user_crypto_balances").upsert(
+        {
+          user_id: targetUserId,
+          symbol: sym,
+          balance: newQty,
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "user_id,symbol" },
+      );
+    }
+  }
 
   // 2. Update profiles.crypto_balances
   const updatedJson = {
     ...currentJson,
     [sym]: newQty,
+    [sym.toLowerCase()]: newQty,
   };
 
-  await supabaseAdmin
-    .from("profiles")
-    .update({
-      crypto_balances: updatedJson as any,
-      updated_at: new Date().toISOString(),
-    } as never)
-    .eq("id", targetUserId);
+  try {
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        crypto_balances: updatedJson as any,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", targetUserId);
+  } catch (profErr) {
+    console.warn("[adminAdjustCryptoBalance] profile update warning:", profErr);
+  }
 
-  // 3. Insert transaction
+  // 3. Insert transaction for user visibility
+  const FALLBACK_PRICES_MAP: Record<string, number> = {
+    BTC: 96500,
+    ETH: 3450,
+    BNB: 650,
+    SOL: 195,
+    XRP: 2.45,
+    ADA: 0.85,
+    DOGE: 0.28,
+    USDT: 1.0,
+    USDC: 1.0,
+  };
+  const unitPrice = FALLBACK_PRICES_MAP[sym] ?? 1.0;
+  const approxUsd = Number((qty * unitPrice).toFixed(2));
+
   await supabaseAdmin.from("transactions").insert({
     user_id: targetUserId,
     type: direction === "credit" ? "admin_credit" : "admin_debit",
-    amount: 0,
+    amount: approxUsd,
+    quantity: newQty,
     asset_name: `${delta > 0 ? "+" : ""}${delta} ${sym}`,
     status: "completed",
   } as never);
@@ -834,7 +891,7 @@ export async function adminAdjustCryptoBalance(
   await writeActivity(
     targetUserId,
     direction === "credit" ? "admin_credit" : "admin_debit",
-    0,
+    approxUsd,
     `Admin ${direction === "credit" ? "credited" : "debited"} ${qty} ${sym} (New balance: ${newQty} ${sym})`,
     "completed",
   );
@@ -860,14 +917,8 @@ export async function adminApproveDepositCrypto(
   const qty = Number(cryptoQuantity) || 0;
   if (qty <= 0) throw new Error("Please specify a valid crypto quantity greater than zero");
 
-  // 1. Update user_crypto_balances
-  const [{ data: existingBal }, { data: prof }] = await Promise.all([
-    supabaseAdmin
-      .from("user_crypto_balances")
-      .select("balance")
-      .eq("user_id", deposit.user_id)
-      .eq("asset_symbol", sym)
-      .maybeSingle(),
+  const [{ data: userCryptoRows }, { data: prof }] = await Promise.all([
+    supabaseAdmin.from("user_crypto_balances").select("*").eq("user_id", deposit.user_id),
     supabaseAdmin
       .from("profiles")
       .select("crypto_balances")
@@ -875,35 +926,67 @@ export async function adminApproveDepositCrypto(
       .maybeSingle(),
   ]);
 
+  const existingRow = (userCryptoRows ?? []).find(
+    (r: any) =>
+      String(r.symbol || r.asset_symbol || "")
+        .toUpperCase()
+        .trim() === sym,
+  );
+
   const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
   const jsonQty = Number(currentJson[sym] ?? currentJson[sym.toLowerCase()] ?? 0);
-  const rowQty = Number(existingBal?.balance ?? 0);
+  const rowQty = Number(existingRow?.balance ?? (existingRow as any)?.amount ?? 0);
   const currentQty = Math.max(rowQty, jsonQty);
   const newQty = Number((currentQty + qty).toFixed(6));
 
-  await supabaseAdmin.from("user_crypto_balances").upsert(
-    {
+  if (existingRow?.id) {
+    await supabaseAdmin
+      .from("user_crypto_balances")
+      .update({
+        balance: newQty,
+        symbol: sym,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", existingRow.id);
+  } else {
+    const { error: insertErr } = await supabaseAdmin.from("user_crypto_balances").insert({
       user_id: deposit.user_id,
-      asset_symbol: sym,
+      symbol: sym,
       balance: newQty,
       updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,asset_symbol" },
-  );
+    } as any);
+
+    if (insertErr) {
+      await supabaseAdmin.from("user_crypto_balances").upsert(
+        {
+          user_id: deposit.user_id,
+          symbol: sym,
+          balance: newQty,
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "user_id,symbol" },
+      );
+    }
+  }
 
   // 2. Update profiles.crypto_balances JSON
   const updatedJson = {
     ...currentJson,
     [sym]: newQty,
+    [sym.toLowerCase()]: newQty,
   };
 
-  await supabaseAdmin
-    .from("profiles")
-    .update({
-      crypto_balances: updatedJson as any,
-      updated_at: new Date().toISOString(),
-    } as never)
-    .eq("id", deposit.user_id);
+  try {
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        crypto_balances: updatedJson as any,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", deposit.user_id);
+  } catch (profErr) {
+    console.warn("[adminApproveDepositCrypto] profile update warning:", profErr);
+  }
 
   // 3. Mark deposit approved
   await supabaseAdmin
@@ -1190,15 +1273,19 @@ export async function adminReconcileLedger(userId: string, targetUserId?: string
     // Sync user_crypto_balances with profiles.crypto_balances JSON
     const { data: cryptoRows } = await supabaseAdmin
       .from("user_crypto_balances")
-      .select("asset_symbol, balance")
+      .select("symbol, balance")
       .eq("user_id", prof.id);
 
     const jsonMap = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
     const mergedCrypto: Record<string, number> = { ...jsonMap };
 
     (cryptoRows || []).forEach((row: any) => {
-      const sym = String(row.asset_symbol).toUpperCase();
-      mergedCrypto[sym] = Math.max(mergedCrypto[sym] ?? 0, Number(row.balance ?? 0));
+      const sym = String(row.symbol || row.asset_symbol || "")
+        .toUpperCase()
+        .trim();
+      if (sym) {
+        mergedCrypto[sym] = Math.max(mergedCrypto[sym] ?? 0, Number(row.balance ?? 0));
+      }
     });
 
     // Update profile
@@ -1219,11 +1306,11 @@ export async function adminReconcileLedger(userId: string, targetUserId?: string
         await supabaseAdmin.from("user_crypto_balances").upsert(
           {
             user_id: prof.id,
-            asset_symbol: sym,
+            symbol: sym,
             balance: qty,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,asset_symbol" },
+          } as any,
+          { onConflict: "user_id,symbol" },
         );
       }
     }
@@ -1312,6 +1399,16 @@ export async function adminResetSupportChats(userId: string) {
 export async function markSupportThreadRead(threadId: string, role: "user" | "admin") {
   if (!threadId) return { ok: false };
   try {
+    // Also find user_id for this thread so any split/orphan thread records for this user are cleared!
+    const { data: thread } = await supabaseAdmin
+      .from("support_threads")
+      .select("user_id")
+      .eq("id", threadId)
+      .maybeSingle();
+
+    const userId = thread?.user_id;
+
+    // 1. Mark by thread_id
     let query = supabaseAdmin
       .from("support_messages")
       .update({ is_read: true })
@@ -1324,11 +1421,26 @@ export async function markSupportThreadRead(threadId: string, role: "user" | "ad
       query = query.eq("sender", "user");
     }
 
-    const { error } = await query;
-    if (error) {
-      console.warn("[markSupportThreadRead] update error:", error);
+    await query;
+
+    // 2. Also mark by user_id if known so no orphan thread keeps showing unread
+    if (userId) {
+      let userQuery = supabaseAdmin
+        .from("support_messages")
+        .update({ is_read: true })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+
+      if (role === "user") {
+        userQuery = userQuery.neq("sender", "user");
+      } else {
+        userQuery = userQuery.eq("sender", "user");
+      }
+
+      await userQuery;
     }
-    return { ok: !error };
+
+    return { ok: true };
   } catch (err) {
     console.error("[markSupportThreadRead] exception:", err);
     return { ok: false };

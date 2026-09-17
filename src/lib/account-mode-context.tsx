@@ -60,9 +60,9 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
 
   const [rawProfile, setRawProfile] = useState<any>(null);
-  const [rawCryptoRows, setRawCryptoRows] = useState<{ asset_symbol: string; balance: number }[]>(
-    [],
-  );
+  const [rawCryptoRows, setRawCryptoRows] = useState<
+    { id?: string; symbol?: string; asset_symbol?: string; balance: number; updated_at?: string }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
@@ -87,7 +87,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           .maybeSingle(),
         supabase
           .from("user_crypto_balances")
-          .select("asset_symbol, balance")
+          .select("id, symbol, balance, updated_at")
           .eq("user_id", user.id),
       ]);
 
@@ -225,6 +225,11 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
         },
       )
+      .on("broadcast", { event: "balance-sync" }, () => {
+        fetchDbBalances();
+        qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+      })
       .subscribe();
 
     return () => {

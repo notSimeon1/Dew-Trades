@@ -60,7 +60,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
           .from("user_crypto_balances")
           .select("balance")
           .eq("user_id", data.userId)
-          .eq("asset_symbol", "USDT")
+          .eq("symbol", "USDT")
           .maybeSingle();
 
         const jsonUsdt = Number(((prof as any)?.crypto_balances ?? {}).USDT ?? 0);
@@ -121,11 +121,11 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         await supabaseAdmin.from("user_crypto_balances").upsert(
           {
             user_id: data.userId,
-            asset_symbol: "USDT",
+            symbol: "USDT",
             balance: Number(newBalance.toFixed(6)),
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,asset_symbol" },
+          } as any,
+          { onConflict: "user_id,symbol" },
         );
       } else {
         // Deduct from USD fiat live balance
@@ -189,10 +189,9 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
             .eq("id", data.userId);
           await supabaseAdmin
             .from("user_crypto_balances")
-            .upsert(
-              { user_id: data.userId, asset_symbol: "USDT", balance: availableBalance },
-              { onConflict: "user_id,asset_symbol" },
-            );
+            .upsert({ user_id: data.userId, symbol: "USDT", balance: availableBalance } as any, {
+              onConflict: "user_id,symbol",
+            });
         } else {
           await supabaseAdmin
             .from("profiles" as any)

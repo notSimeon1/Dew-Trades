@@ -187,7 +187,7 @@ function BotCard({
         .from("user_crypto_balances")
         .select("balance")
         .eq("user_id", user.id)
-        .eq("asset_symbol", "USDT")
+        .eq("symbol", "USDT")
         .maybeSingle();
       const jsonVal = Number((prof?.crypto_balances as any)?.USDT ?? 0);
       const rowVal = Number(cryptoRow?.balance ?? 0);

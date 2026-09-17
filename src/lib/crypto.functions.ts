@@ -15,7 +15,7 @@ export interface UserPortfolioResult {
   cryptoUsdBalance: number;
   totalLiveBalance: number;
   cryptoBalances: Record<string, number>;
-  cryptoRows: { asset_symbol: string; balance: number }[];
+  cryptoRows: { symbol?: string; asset_symbol?: string; balance: number }[];
   isSuspended: boolean;
 }
 
@@ -46,10 +46,7 @@ export const getUserAccountPortfolio = createServerFn({ method: "POST" })
           )
           .eq("id", userId)
           .maybeSingle(),
-        supabaseAdmin
-          .from("user_crypto_balances")
-          .select("asset_symbol, balance")
-          .eq("user_id", userId),
+        supabaseAdmin.from("user_crypto_balances").select("symbol, balance").eq("user_id", userId),
       ]);
 
       const profile = profRes.data;

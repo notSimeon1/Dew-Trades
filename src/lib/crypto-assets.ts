@@ -118,7 +118,7 @@ export function computeEnrichedCryptoAssets(
     if (sym === "USDT" || sym === "USDC") {
       price = 1.0;
     } else {
-      const tickerPrice = tickers[`${sym}USDT`]?.price;
+      const tickerPrice = tickers[`${sym}USDT`]?.price ?? tickers[sym]?.price;
       if (tickerPrice && tickerPrice > 0) {
         price = tickerPrice;
       } else if (CRYPTO_FALLBACK_PRICES[sym]) {
