@@ -81,9 +81,16 @@ function Dashboard() {
   const [filter, setFilter] = useState<FilterId>("hot");
   const [market, setMarket] = useState<"spot" | "futures">("spot");
   const [convertModalOpen, setConvertModalOpen] = useState(false);
-  const [favs, setFavs] = useState<string[]>(() =>
-    typeof window !== "undefined" ? JSON.parse(localStorage.getItem("dewtrades_favs") ?? "[]") : [],
-  );
+  const [favs, setFavs] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return JSON.parse(localStorage.getItem("dewtrades_favs") ?? "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
 
   const { tickers, status } = useBinancePrices(SYMBOLS);
 
@@ -109,8 +116,13 @@ function Dashboard() {
   const toggleFav = (s: string) => {
     setFavs((prev) => {
       const next = prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s];
-      if (typeof window !== "undefined")
-        localStorage.setItem("dewtrades_favs", JSON.stringify(next));
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("dewtrades_favs", JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+      }
       return next;
     });
   };

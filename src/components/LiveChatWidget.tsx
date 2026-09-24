@@ -352,14 +352,16 @@ export function LiveChatWidget() {
   if (!user || pos === null) return null;
 
   const panelLeft = (() => {
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 1024;
     const centered = pos.left - (PANEL_WIDTH - BUTTON_SIZE) / 2;
-    return Math.min(Math.max(8, centered), window.innerWidth - PANEL_WIDTH - 8);
+    return Math.min(Math.max(8, centered), screenWidth - PANEL_WIDTH - 8);
   })();
   const panelTop = (() => {
+    const screenHeight = typeof window !== "undefined" ? window.innerHeight : 768;
     const above = pos.top - PANEL_HEIGHT - 12;
     if (above >= 8) return above;
     const below = pos.top + BUTTON_SIZE + 12;
-    return Math.min(Math.max(8, below), window.innerHeight - PANEL_HEIGHT - 8);
+    return Math.min(Math.max(8, below), screenHeight - PANEL_HEIGHT - 8);
   })();
 
   return (

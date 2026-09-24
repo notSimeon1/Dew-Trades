@@ -102,10 +102,14 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
     if (typeof window !== "undefined") {
-      const saved = (localStorage.getItem(LOCAL_STORAGE_KEY) ||
-        localStorage.getItem("solentrades_base_currency")) as CurrencyCode;
-      if (saved && AVAILABLE_CURRENCIES.some((c) => c.code === saved)) {
-        return saved;
+      try {
+        const saved = (localStorage.getItem(LOCAL_STORAGE_KEY) ||
+          localStorage.getItem("solentrades_base_currency")) as CurrencyCode;
+        if (saved && AVAILABLE_CURRENCIES.some((c) => c.code === saved)) {
+          return saved;
+        }
+      } catch {
+        /* storage restricted or disabled */
       }
     }
     return "USD";
@@ -127,7 +131,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
           if (AVAILABLE_CURRENCIES.some((c) => c.code === code)) {
             setCurrencyState(code);
             if (typeof window !== "undefined") {
-              localStorage.setItem(LOCAL_STORAGE_KEY, code);
+              try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, code);
+              } catch {
+                /* ignore */
+              }
             }
           }
         }
@@ -168,7 +176,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     async (code: CurrencyCode) => {
       setCurrencyState(code);
       if (typeof window !== "undefined") {
-        localStorage.setItem(LOCAL_STORAGE_KEY, code);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, code);
+        } catch {
+          /* ignore */
+        }
       }
       if (user) {
         await supabase.from("profiles").update({ base_currency: code }).eq("id", user.id);

@@ -14,7 +14,7 @@ export function useRealtimeProfitEngine() {
     let isRunning = false;
 
     const interval = setInterval(async () => {
-      if (document.hidden || isRunning) return;
+      if ((typeof document !== "undefined" && document.hidden) || isRunning) return;
       isRunning = true;
       try {
         // 1. Fetch bots and copy allocations in parallel

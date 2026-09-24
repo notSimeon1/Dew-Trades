@@ -6,10 +6,14 @@ class SoundFXEngine {
 
   constructor() {
     if (typeof window !== "undefined") {
-      const saved =
-        localStorage.getItem("dewtrades_audio_enabled") ??
-        localStorage.getItem("solentrades_audio_enabled");
-      this.enabled = saved !== "false";
+      try {
+        const saved =
+          localStorage.getItem("dewtrades_audio_enabled") ??
+          localStorage.getItem("solentrades_audio_enabled");
+        this.enabled = saved !== "false";
+      } catch {
+        this.enabled = true;
+      }
     }
   }
 
@@ -20,7 +24,11 @@ class SoundFXEngine {
   public setEnabled(enabled: boolean) {
     this.enabled = enabled;
     if (typeof window !== "undefined") {
-      localStorage.setItem("dewtrades_audio_enabled", String(enabled));
+      try {
+        localStorage.setItem("dewtrades_audio_enabled", String(enabled));
+      } catch {
+        // Storage disabled or blocked
+      }
     }
   }
 
