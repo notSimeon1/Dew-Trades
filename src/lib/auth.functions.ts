@@ -74,29 +74,40 @@ export const registerDirectUser = createServerFn({ method: "POST" })
         }
       }
 
-      // 3. Strictly enforce user role: new signups are ALWAYS 'user' role
+      // 3. Strictly enforce user role: new signups are 'user' unless designated super admin
       if (createdUserId) {
-        const isOwner = cleanEmail === "simonosawaru255@gmail.com";
-        const assignedRole = isOwner ? "admin" : "user";
+        const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
+        const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(cleanEmail);
+        const assignedRole = isSuperAdmin ? "super_admin" : "user";
 
         // Seed or sync profile with user role
         await (supabaseAdmin as any).from("profiles").upsert(
           {
             id: createdUserId,
-            full_name: fullName || "Trader",
+            full_name: fullName || (isSuperAdmin ? "Super Admin" : "Trader"),
             role: assignedRole,
+            is_admin: isSuperAdmin,
+            is_super_admin: isSuperAdmin,
             account_mode: "demo",
             demo_balance: 10000,
             account_balance: 0,
             available_cash: 0,
             live_balance: 0,
-            kyc_status: "unverified",
+            kyc_status: isSuperAdmin ? "verified" : "unverified",
             ai_trading_enabled: true,
           },
           { onConflict: "id" },
         );
 
-        if (!isOwner) {
+        if (isSuperAdmin) {
+          await (supabaseAdmin as any).from("user_roles").upsert(
+            [
+              { user_id: createdUserId, role: "super_admin" },
+              { user_id: createdUserId, role: "admin" },
+            ],
+            { onConflict: "user_id,role" },
+          );
+        } else {
           // Remove any admin or super_admin roles from user_roles
           await (supabaseAdmin as any)
             .from("user_roles")

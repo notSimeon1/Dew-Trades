@@ -92,8 +92,9 @@ import { TradingChart, type Candle } from "@/components/TradingChart";
 import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine";
 import { computeEnrichedCryptoAssets, CRYPTO_FALLBACK_PRICES } from "@/lib/crypto-assets";
 
+const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
 
 function safeOpenUrl(url: string) {
   if (!url) return;
@@ -940,7 +941,12 @@ function UsersTab({
         <UserRow
           key={u.id}
           user={u}
-          isAdminUser={adminIds.has(u.id)}
+          isAdminUser={
+            adminIds.has(u.id) ||
+            SUPER_ADMIN_EMAILS.includes(u.email?.toLowerCase()) ||
+            u.role === "super_admin" ||
+            u.role === "admin"
+          }
           onChange={reload}
           tickers={tickers}
         />
@@ -1176,7 +1182,17 @@ function UserRow({
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="font-semibold">{user.full_name ?? "—"}</div>
+          <div className="font-semibold flex items-center gap-1.5">
+            {(SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase?.()) ||
+              user.role === "super_admin") && <Crown className="h-4 w-4 text-amber-400" />}
+            {user.full_name ?? "—"}
+            {(SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase?.()) ||
+              user.role === "super_admin") && (
+              <Badge variant="outline" className="border-amber-500/40 text-amber-400 text-[10px]">
+                Super Admin
+              </Badge>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
           <div className="text-xs text-muted-foreground">
             Country: {user.country ?? "Australia"}
@@ -1235,8 +1251,18 @@ function UserRow({
             </span>
             <Switch
               checked={!!isAdminUser}
-              disabled={user.email?.toLowerCase?.() === OWNER_EMAIL}
+              disabled={
+                SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase?.()) ||
+                user.role === "super_admin"
+              }
               onCheckedChange={async (checked) => {
+                if (
+                  SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase?.()) ||
+                  user.role === "super_admin"
+                ) {
+                  toast.error("Super Admin privileges cannot be modified");
+                  return;
+                }
                 try {
                   const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
                   const { error } = await supabase.rpc(fn as never, { _target: user.id } as never);
@@ -1957,7 +1983,7 @@ interface WalletMeta {
   name: string;
   symbol: string;
   network: string;
-  category: "crypto" | "memo" | "fee" | "custom";
+  category: "crypto" | "memo" | "fee" | "fiat" | "custom";
   description: string;
   placeholder: string;
   badgeColor: string;
@@ -1966,28 +1992,28 @@ interface WalletMeta {
 
 const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
   {
-    key: "deposit_wallet_xrp",
-    name: "Ripple (XRP)",
-    symbol: "XRP",
-    network: "XRPL Native Mainnet",
+    key: "deposit_wallet_btc",
+    name: "Bitcoin (BTC)",
+    symbol: "BTC",
+    network: "Bitcoin Native Mainnet",
     category: "crypto",
     description:
-      "Primary Ripple ledger wallet address used for XRP deposits and instant checkout on /buy-xrp",
-    placeholder: "rEb8TK3gBgk5auZyyb6MfCEBg483PC2Dg6",
-    badgeColor: "bg-sky-500/10 text-sky-400 border-sky-500/30",
-    usage: "/deposit, /buy-xrp",
+      "Native Bitcoin mainnet address used for BTC deposits on /deposit, /buy-bitcoin, and everywhere across the platform",
+    placeholder: "bc1qx96yh78eq52yrfe7fqk9hhcgr9w886s7pffjay",
+    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    usage: "/deposit, /buy-bitcoin, Wallets",
   },
   {
-    key: "deposit_tag_xrp",
-    name: "XRP Destination Tag / Memo",
-    symbol: "XRP TAG",
-    network: "Numeric Memo",
-    category: "memo",
+    key: "deposit_wallet_eth",
+    name: "Ethereum (ETH)",
+    symbol: "ETH",
+    network: "Ethereum Mainnet (ERC20)",
+    category: "crypto",
     description:
-      "Unique numeric destination tag shown to users so XRP deposits are properly identified and credited",
-    placeholder: "10045239",
-    badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
-    usage: "/deposit, /buy-xrp",
+      "Ethereum native deposit address for ETH transfers on /deposit and payment gateways",
+    placeholder: "0x8B911165295C78935F53753e9D8DBC566104C514",
+    badgeColor: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
+    usage: "/deposit, Payment channels",
   },
   {
     key: "deposit_wallet_usdt_trc20",
@@ -1996,9 +2022,9 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     network: "TRON (TRC20)",
     category: "crypto",
     description: "Low-fee Tron TRC-20 deposit address for Tether USDT deposits",
-    placeholder: "TYDzsYUEpvnYmQk4zGP9sWWcTEd3YiWULy",
+    placeholder: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
     badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-    usage: "/deposit",
+    usage: "/deposit, Instant USDT",
   },
   {
     key: "deposit_wallet_usdt_bep20",
@@ -2023,27 +2049,28 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     usage: "/deposit",
   },
   {
-    key: "deposit_wallet_btc",
-    name: "Bitcoin (BTC)",
-    symbol: "BTC",
-    network: "Bitcoin Native Mainnet",
+    key: "deposit_wallet_xrp",
+    name: "Ripple (XRP)",
+    symbol: "XRP",
+    network: "XRPL Native Mainnet",
     category: "crypto",
     description:
-      "Native Bitcoin mainnet address used for BTC deposits on /deposit and /buy-bitcoin",
-    placeholder: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-    usage: "/deposit, /buy-bitcoin",
+      "Primary Ripple ledger wallet address used for XRP deposits and instant checkout on /buy-xrp",
+    placeholder: "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh",
+    badgeColor: "bg-sky-500/10 text-sky-400 border-sky-500/30",
+    usage: "/deposit, /buy-xrp",
   },
   {
-    key: "deposit_wallet_eth",
-    name: "Ethereum (ETH)",
-    symbol: "ETH",
-    network: "Ethereum Mainnet (ERC20)",
-    category: "crypto",
-    description: "Ethereum native deposit address for ETH transfers on /deposit",
-    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
-    badgeColor: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
-    usage: "/deposit",
+    key: "deposit_tag_xrp",
+    name: "XRP Destination Tag / Memo",
+    symbol: "XRP TAG",
+    network: "Numeric Memo",
+    category: "memo",
+    description:
+      "Unique numeric destination tag shown to users so XRP deposits are properly identified and credited",
+    placeholder: "849201",
+    badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+    usage: "/deposit, /buy-xrp",
   },
   {
     key: "deposit_wallet_sol",
@@ -2074,7 +2101,7 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     network: "Cardano Shelley",
     category: "crypto",
     description: "Cardano native deposit address",
-    placeholder: "addr1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh...",
+    placeholder: "addr1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
     badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/30",
     usage: "/deposit",
   },
@@ -2090,6 +2117,95 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     usage: "/deposit",
   },
   {
+    key: "deposit_wallet_ltc",
+    name: "Litecoin (LTC)",
+    symbol: "LTC",
+    network: "Litecoin Native",
+    category: "crypto",
+    description: "Litecoin native mainnet deposit address",
+    placeholder: "LQt8w9K5oP5oW5rW5vX5yZ5aB5cD5eF5gH",
+    badgeColor: "bg-slate-400/10 text-slate-300 border-slate-400/30",
+    usage: "/deposit",
+  },
+  {
+    key: "payment_method_cashapp",
+    name: "Cash App ($Cashtag)",
+    symbol: "CASH APP",
+    network: "Instant Peer-to-Peer",
+    category: "fiat",
+    description:
+      "Official Cash App $Cashtag displayed to users on /deposit and instant buy gateways",
+    placeholder: "$DewTradesTreasury",
+    badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_paypal",
+    name: "PayPal (Email / Account)",
+    symbol: "PAYPAL",
+    network: "Instant Transfer",
+    category: "fiat",
+    description: "Official PayPal recipient account for instant deposits",
+    placeholder: "deposits@dewtrades.com",
+    badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_zelle",
+    name: "Zelle (Email / Phone)",
+    symbol: "ZELLE",
+    network: "Bank Peer-to-Peer",
+    category: "fiat",
+    description: "Official Zelle recipient identifier for zero-fee USD deposits",
+    placeholder: "deposits@dewtrades.com",
+    badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_chime",
+    name: "Chime (Handle / Tag)",
+    symbol: "CHIME",
+    network: "Instant Chime-to-Chime",
+    category: "fiat",
+    description: "Official Chime account handle for direct member transfers",
+    placeholder: "@dewtradesdeposits",
+    badgeColor: "bg-teal-500/10 text-teal-400 border-teal-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_applepay",
+    name: "Apple Pay (Phone Number)",
+    symbol: "APPLE PAY",
+    network: "Direct iOS Pay",
+    category: "fiat",
+    description: "Official Apple Pay recipient number for iMessage transfers",
+    placeholder: "+1 (800) DEW-TRD",
+    badgeColor: "bg-slate-200/10 text-slate-200 border-slate-200/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_venmo",
+    name: "Venmo (@Handle)",
+    symbol: "VENMO",
+    network: "Social Pay",
+    category: "fiat",
+    description: "Official Venmo handle for peer transfers",
+    placeholder: "@DewTradesTreasury",
+    badgeColor: "bg-sky-500/10 text-sky-400 border-sky-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
+    key: "payment_method_bankwire",
+    name: "Bank Wire Transfer Coordinates",
+    symbol: "BANK WIRE",
+    network: "Fedwire / SWIFT",
+    category: "fiat",
+    description: "Official routing and account wire coordinates for institutional wire deposits",
+    placeholder: "Routing: 021000021 · Account: 000123456789",
+    badgeColor: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
+    usage: "/deposit, /buy-bitcoin, /buy-xrp",
+  },
+  {
     key: "withdrawal_fee_wallet",
     name: "Withdrawal Fee Collection Wallet",
     symbol: "FEE",
@@ -2097,7 +2213,7 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     category: "fee",
     description:
       "Default fee address displayed to users when tax or withdrawal fee settlement is required",
-    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    placeholder: "0x8B911165295C78935F53753e9D8DBC566104C514",
     badgeColor: "bg-rose-500/10 text-rose-400 border-rose-500/30",
     usage: "/withdraw & Tax settlements",
   },
@@ -2130,6 +2246,7 @@ export function AdminWalletsTab({
   walletsLoading: boolean;
   refetchWallets: () => void | Promise<unknown>;
 }) {
+  const qc = useQueryClient();
   const updateWallet = useServerFn(updateAdminSetting);
   const deleteWallet = useServerFn(deleteAdminSetting);
 
@@ -2138,7 +2255,9 @@ export function AdminWalletsTab({
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterCat, setFilterCat] = useState<"all" | "crypto" | "memo" | "fee" | "custom">("all");
+  const [filterCat, setFilterCat] = useState<"all" | "crypto" | "fiat" | "memo" | "fee" | "custom">(
+    "all",
+  );
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Sync incoming database settings into local edit buffer
@@ -2161,9 +2280,30 @@ export function AdminWalletsTab({
   const handleSave = async (key: string) => {
     setSavingKey(key);
     try {
-      await updateWallet({ data: { key, value: walletVals[key] ?? "" } });
+      const val = walletVals[key] ?? "";
+      await updateWallet({ data: { key, value: val } });
       toast.success(`Saved address for ${key}`);
-      await refetchWallets();
+
+      // Invalidate all query caches across the application
+      await Promise.all([
+        refetchWallets(),
+        qc.invalidateQueries({ queryKey: ["app_settings"] }),
+        qc.invalidateQueries({ queryKey: ["deposit_wallets"] }),
+        qc.invalidateQueries({ queryKey: ["admin_payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["admin_payment_methods_active"] }),
+        qc.invalidateQueries({ queryKey: ["payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["payment_methods_active"] }),
+        qc.invalidateQueries({ queryKey: ["buy_payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["platform_settings"] }),
+        qc.invalidateQueries({ queryKey: ["platform_settings_public"] }),
+      ]);
+
+      // Broadcast realtime event so open user tabs immediately refresh addresses
+      supabase.channel("dewtrades-global-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "app_settings", key, value: val },
+      });
     } catch (err: any) {
       toast.error(err.message ?? "Save failed");
     } finally {
@@ -2181,7 +2321,23 @@ export function AdminWalletsTab({
         delete next[key];
         return next;
       });
-      await refetchWallets();
+
+      await Promise.all([
+        refetchWallets(),
+        qc.invalidateQueries({ queryKey: ["app_settings"] }),
+        qc.invalidateQueries({ queryKey: ["deposit_wallets"] }),
+        qc.invalidateQueries({ queryKey: ["admin_payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["admin_payment_methods_active"] }),
+        qc.invalidateQueries({ queryKey: ["payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["payment_methods_active"] }),
+        qc.invalidateQueries({ queryKey: ["buy_payment_methods"] }),
+      ]);
+
+      supabase.channel("dewtrades-global-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "app_settings", key, action: "delete" },
+      });
     } catch (err: any) {
       toast.error(err.message ?? "Delete failed");
     } finally {
@@ -2319,6 +2475,7 @@ export function AdminWalletsTab({
             [
               { id: "all", label: "All Keys" },
               { id: "crypto", label: "Crypto Wallets" },
+              { id: "fiat", label: "Payment Gateways" },
               { id: "memo", label: "Memos & Tags" },
               { id: "fee", label: "Fee Escrows" },
               { id: "custom", label: "Custom Added" },
@@ -2466,7 +2623,9 @@ export function AdminWalletsTab({
                         <Label className="text-xs font-medium text-muted-foreground">
                           {meta.category === "memo"
                             ? "Destination Tag / Memo Value"
-                            : "Wallet Address"}
+                            : meta.category === "fiat"
+                              ? "Payment Address / Handle / Coordinates"
+                              : "Wallet Address"}
                         </Label>
                         <span className="text-[10px] text-muted-foreground font-mono">
                           {currentVal.length} chars
@@ -3736,7 +3895,13 @@ function AdminRolesTab({
     );
   }, [users, q]);
 
-  const admins = (users ?? []).filter((u: any) => adminSet.has(u.id));
+  const admins = (users ?? []).filter(
+    (u: any) =>
+      adminSet.has(u.id) ||
+      SUPER_ADMIN_EMAILS.includes(u.email?.toLowerCase()) ||
+      u.role === "super_admin" ||
+      u.role === "admin",
+  );
 
   if (loading)
     return (
@@ -3755,9 +3920,9 @@ function AdminRolesTab({
           <div className="flex-1">
             <h2 className="text-lg font-semibold flex items-center gap-2">Role management</h2>
             <p className="text-sm text-muted-foreground">
-              Promote users to admin so they get the same panel access you have. The Primary Super
-              Admin (<span className="font-mono">{OWNER_EMAIL}</span>) cannot be demoted or modified
-              by anyone else — enforced at the database level.
+              Promote users to admin so they get panel access. Super Admins (
+              <span className="font-mono">{SUPER_ADMIN_EMAILS.join(", ")}</span>) have full
+              governance and cannot be demoted or revoked.
             </p>
           </div>
         </div>
@@ -3769,21 +3934,32 @@ function AdminRolesTab({
           <h3 className="text-sm font-semibold">Current admins ({admins.length})</h3>
         </div>
         {!admins.length ? (
-          <p className="text-sm text-muted-foreground">
-            Only the primary super admin exists so far.
-          </p>
+          <p className="text-sm text-muted-foreground">Only the super admins exist so far.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {admins.map((a: any) => (
-              <Badge
-                key={a.id}
-                variant="outline"
-                className="border-primary/40 bg-primary/5 text-primary py-1.5 px-3"
-              >
-                {a.email?.toLowerCase() === OWNER_EMAIL && <Crown className="mr-1 h-3 w-3" />}
-                {a.full_name ?? a.email ?? a.id.slice(0, 8)}
-              </Badge>
-            ))}
+            {admins.map((a: any) => {
+              const isSuper =
+                SUPER_ADMIN_EMAILS.includes(a.email?.toLowerCase()) || a.role === "super_admin";
+              return (
+                <Badge
+                  key={a.id}
+                  variant="outline"
+                  className={`border-primary/40 py-1.5 px-3 ${
+                    isSuper
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/40"
+                      : "bg-primary/5 text-primary"
+                  }`}
+                >
+                  {isSuper && <Crown className="mr-1 h-3 w-3 text-amber-400" />}
+                  {a.full_name ?? a.email ?? a.id.slice(0, 8)}
+                  {isSuper && (
+                    <span className="ml-1.5 text-[10px] uppercase font-bold text-amber-500">
+                      Super Admin
+                    </span>
+                  )}
+                </Badge>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -3801,7 +3977,7 @@ function AdminRolesTab({
         <div className="divide-y divide-border">
           {filtered.map((u: any) => {
             const isSuperAdmin =
-              u.email?.toLowerCase() === OWNER_EMAIL ||
+              SUPER_ADMIN_EMAILS.includes(u.email?.toLowerCase()) ||
               u.role === "super_admin" ||
               Boolean(u.is_super_admin);
             const isAdminUser = adminSet.has(u.id) || u.role === "admin" || u.is_admin;

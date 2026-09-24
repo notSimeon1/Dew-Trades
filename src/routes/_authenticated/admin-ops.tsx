@@ -40,8 +40,9 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { clearAllAdminBalances } from "@/lib/admin.functions";
 
+const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin-ops")({
   component: AdminOpsPage,
@@ -121,10 +122,6 @@ function AdminOpsPage() {
             <Layers className="mr-1.5 h-3.5 w-3.5" />
             Pre-Market
           </TabsTrigger>
-          <TabsTrigger value="payments" className="shrink-0">
-            <CreditCard className="mr-1.5 h-3.5 w-3.5" />
-            Payments
-          </TabsTrigger>
           <TabsTrigger value="settings" className="shrink-0">
             <Settings className="mr-1.5 h-3.5 w-3.5" />
             Settings
@@ -150,9 +147,6 @@ function AdminOpsPage() {
         </TabsContent>
         <TabsContent value="premarket">
           <PreMarketTab />
-        </TabsContent>
-        <TabsContent value="payments">
-          <PaymentsTab />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab />
@@ -648,221 +642,6 @@ function PreMarketTab() {
   );
 }
 
-function PaymentsTab() {
-  const qc = useQueryClient();
-  const [draft, setDraft] = useState<Record<string, any>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const { data: methods, isLoading } = useQuery({
-    queryKey: ["admin_payment_methods"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("admin_payment_methods")
-        .select("*")
-        .order("sort_order");
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 60000,
-  });
-
-  const val = (m: any, k: string) => draft[m.method_key]?.[k] ?? m[k] ?? "";
-  const set = (key: string, k: string, v: any) =>
-    setDraft((d) => ({ ...d, [key]: { ...(d[key] ?? {}), [k]: v } }));
-
-  const save = async (m: any) => {
-    setBusy(m.method_key);
-    try {
-      const { error } = await supabase
-        .from("admin_payment_methods")
-        .update({
-          method_name: String(val(m, "method_name")),
-          identifier_label: String(val(m, "identifier_label")),
-          identifier: String(val(m, "identifier")),
-          recipient_name: String(val(m, "recipient_name")),
-          cash_app_link:
-            m.method_key === "cash_app" || m.method_key === "cashapp"
-              ? String(val(m, "cash_app_link"))
-              : null,
-          extra:
-            m.method_key === "cash_app" || m.method_key === "cashapp"
-              ? { cash_app_link: String(val(m, "cash_app_link")) }
-              : {},
-          is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
-          sort_order: Number(val(m, "sort_order")) || 0,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", m.id);
-      if (error) throw error;
-      toast.success(`${val(m, "method_name")} updated — live on deposit pages`);
-      setDraft((d) => ({ ...d, [m.method_key]: {} }));
-      qc.invalidateQueries({ queryKey: ["admin_payment_methods"] });
-      qc.invalidateQueries({ queryKey: ["admin_payment_methods_active"] });
-      qc.invalidateQueries({ queryKey: ["payment_methods_active"] });
-      qc.invalidateQueries({ queryKey: ["payment_methods"] });
-      qc.invalidateQueries({ queryKey: ["buy_payment_methods"] });
-      qc.invalidateQueries({ queryKey: ["deposit_wallets"] });
-      supabase.channel("dewtrades-global-realtime").send({
-        type: "broadcast",
-        event: "admin-ops-update",
-        payload: { table: "admin_payment_methods" },
-      });
-    } catch (err: any) {
-      toast.error(err.message ?? "Save failed");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <Card className="border-primary/30 bg-primary/5 p-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <CreditCard className="h-4 w-4 text-primary" /> System payment accounts
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Edit the account details users see on the Deposit and Buy Bitcoin pages. Saving updates
-          the live instructions instantly.
-        </p>
-      </Card>
-
-      {isLoading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(methods ?? []).map((m: any) => (
-            <Card key={m.id} className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary">
-                    {m.method_key}
-                  </span>
-                  <Input
-                    className="h-8 w-40"
-                    value={val(m, "method_name")}
-                    onChange={(e) => set(m.method_key, "method_name", e.target.value)}
-                  />
-                </div>
-                <Badge
-                  className={
-                    (draft[m.method_key]?.is_active ?? m.is_active)
-                      ? "bg-success text-success-foreground"
-                      : ""
-                  }
-                  variant={
-                    (draft[m.method_key]?.is_active ?? m.is_active) ? "default" : "secondary"
-                  }
-                >
-                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Active" : "Hidden"}
-                </Badge>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs text-muted-foreground">Field label</label>
-                  <Input
-                    className="mt-1 h-9"
-                    value={val(m, "identifier_label")}
-                    onChange={(e) => set(m.method_key, "identifier_label", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Recipient / account name</label>
-                  <Input
-                    className="mt-1 h-9"
-                    value={val(m, "recipient_name")}
-                    onChange={(e) => set(m.method_key, "recipient_name", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Account detail / wallet address / tag
-                </label>
-                <div className="mt-1 flex gap-2">
-                  <Input
-                    className="h-9 font-mono text-xs"
-                    value={val(m, "identifier")}
-                    onChange={(e) => set(m.method_key, "identifier", e.target.value)}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(String(val(m, "identifier")));
-                      toast.success("Copied");
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-              </div>
-
-              {(m.method_key === "cash_app" || m.method_key === "cashapp") && (
-                <div>
-                  <label className="text-xs text-muted-foreground">
-                    Cash App Link (clickable URL)
-                  </label>
-                  <Input
-                    className="mt-1 h-9"
-                    placeholder="https://cash.app/$yourname"
-                    value={val(m, "cash_app_link") || val(m, "extra")?.cash_app_link || ""}
-                    onChange={(e) => set(m.method_key, "cash_app_link", e.target.value)}
-                  />
-                </div>
-              )}
-
-              <div className="rounded-lg border border-border bg-surface p-3 text-xs">
-                <div className="mb-1 font-semibold text-muted-foreground">User-side preview</div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{val(m, "identifier_label")}</span>
-                  <span className="font-mono font-semibold">{val(m, "identifier") || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Recipient</span>
-                  <span className="font-semibold">{val(m, "recipient_name") || "—"}</span>
-                </div>
-                {m.method_key === "cash_app" && val(m, "cash_app_link") && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Link</span>
-                    <span className="font-semibold text-primary">{val(m, "cash_app_link")}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    set(m.method_key, "is_active", !(draft[m.method_key]?.is_active ?? m.is_active))
-                  }
-                >
-                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Set hidden" : "Set active"}
-                </Button>
-                <Button
-                  size="sm"
-                  className="ml-auto bg-gradient-hero"
-                  disabled={busy === m.method_key}
-                  onClick={() => save(m)}
-                >
-                  {busy === m.method_key ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  ) : null}{" "}
-                  Save changes
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ClearBalancesCard() {
   const qc = useQueryClient();
   const [clearing, setClearing] = useState(false);
@@ -966,8 +745,14 @@ function SettingsTab() {
             <div className="mt-1 font-semibold">{profile?.preferred_currency ?? "USD"}</div>
           </div>
           <div className="rounded-lg border border-border bg-surface p-4">
-            <div className="text-xs text-muted-foreground">Owner Email</div>
-            <div className="mt-1 font-semibold">{OWNER_EMAIL}</div>
+            <div className="text-xs text-muted-foreground">Super Admins (2)</div>
+            <div className="mt-1 font-semibold text-xs space-y-1">
+              {SUPER_ADMIN_EMAILS.map((email) => (
+                <div key={email} className="font-mono text-emerald-400">
+                  {email}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Card>

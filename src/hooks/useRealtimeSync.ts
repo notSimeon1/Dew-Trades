@@ -45,15 +45,31 @@ export function useRealtimeSync() {
     // Subscribe to database postgres_changes for admin-controlled and user-facing tables
     const channel = supabase
       .channel("dewtrades-global-realtime")
-      // 1. Payment Methods (Admin Ops edits CashApp, Zelle, Bitcoin, PayPal, etc.)
+      // 1. App Settings (Wallets, tags, platform configurations)
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, () => {
+        queueInvalidate([
+          ["app_settings"],
+          ["deposit_wallets"],
+          ["admin_payment_methods"],
+          ["admin_payment_methods_active"],
+          ["payment_methods"],
+          ["payment_methods_active"],
+          ["buy_payment_methods"],
+          ["platform_settings"],
+          ["platform_settings_public"],
+        ]);
+      })
+      // 2. Payment Methods (Admin edits CashApp, Zelle, Bitcoin, PayPal, etc.)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "admin_payment_methods" },
         () => {
           queueInvalidate([
+            ["app_settings"],
             ["admin_payment_methods"],
             ["admin_payment_methods_active"],
             ["payment_methods"],
+            ["payment_methods_active"],
             ["buy_payment_methods"],
             ["deposit_wallets"],
           ]);
@@ -117,8 +133,15 @@ export function useRealtimeSync() {
       // 9. Admin Ops Broadcast Event for immediate cross-tab synchronization
       .on("broadcast", { event: "admin-ops-update" }, () => {
         queueInvalidate([
+          ["app_settings"],
+          ["deposit_wallets"],
           ["admin_payment_methods"],
+          ["admin_payment_methods_active"],
           ["payment_methods"],
+          ["payment_methods_active"],
+          ["buy_payment_methods"],
+          ["platform_settings"],
+          ["platform_settings_public"],
           ["trading_bots"],
           ["copy_trading_tiers"],
           ["profile"],

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -215,23 +215,82 @@ function BuyBitcoinPage() {
     (parseFloat(siteSettings?.payment_expiry_hours ?? "") || DEFAULT_EXPIRY_SECONDS / 3600) * 3600,
   );
 
-  // Load payment methods from DB (fallback to hardcoded if empty)
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase
+  // Load payment methods from DB (synchronized with app_settings)
+  const loadPaymentMethods = useCallback(async () => {
+    try {
+      const [{ data: methodsData }, { data: settingsData }] = await Promise.all([
+        supabase
           .from("admin_payment_methods")
           .select("*")
           .eq("is_active", true)
-          .order("sort_order" as never);
-        setMethods(data && data.length > 0 ? (data as PaymentMethod[]) : FALLBACK_METHODS);
-      } catch {
-        setMethods(FALLBACK_METHODS);
-      } finally {
-        setLoadingMethods(false);
-      }
-    })();
+          .order("sort_order" as never),
+        supabase.from("app_settings").select("key, value"),
+      ]);
+
+      const settingsMap = new Map((settingsData ?? []).map((s: any) => [s.key, s.value]));
+      const rawList =
+        methodsData && methodsData.length > 0 ? (methodsData as PaymentMethod[]) : FALLBACK_METHODS;
+
+      const list = rawList.map((m) => {
+        let updatedIdentifier = m.identifier;
+        let updatedCashAppLink = m.cash_app_link;
+
+        if (m.method_key === "btc" && settingsMap.has("deposit_wallet_btc")) {
+          updatedIdentifier = settingsMap.get("deposit_wallet_btc")!;
+        } else if (m.method_key === "eth" && settingsMap.has("deposit_wallet_eth")) {
+          updatedIdentifier = settingsMap.get("deposit_wallet_eth")!;
+        } else if (m.method_key === "usdt_trc20" && settingsMap.has("deposit_wallet_usdt_trc20")) {
+          updatedIdentifier = settingsMap.get("deposit_wallet_usdt_trc20")!;
+        } else if (
+          (m.method_key === "cashapp" || m.method_key === "cash_app") &&
+          settingsMap.has("payment_method_cashapp")
+        ) {
+          updatedIdentifier = settingsMap.get("payment_method_cashapp")!;
+          const clean = updatedIdentifier.trim().replace(/^\$+/, "");
+          updatedCashAppLink = clean ? `https://cash.app/$${clean}` : null;
+        } else if (m.method_key === "paypal" && settingsMap.has("payment_method_paypal")) {
+          updatedIdentifier = settingsMap.get("payment_method_paypal")!;
+        } else if (m.method_key === "zelle" && settingsMap.has("payment_method_zelle")) {
+          updatedIdentifier = settingsMap.get("payment_method_zelle")!;
+        } else if (m.method_key === "bankwire" && settingsMap.has("payment_method_bankwire")) {
+          updatedIdentifier = settingsMap.get("payment_method_bankwire")!;
+        }
+
+        return {
+          ...m,
+          identifier: updatedIdentifier,
+          cash_app_link: updatedCashAppLink,
+        };
+      });
+
+      setMethods(list);
+      setSelected((prev) => (prev ? list.find((item) => item.id === prev.id) || prev : null));
+    } catch {
+      setMethods(FALLBACK_METHODS);
+    } finally {
+      setLoadingMethods(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPaymentMethods();
+    const ch = supabase
+      .channel("dewtrades-buy-btc-realtime")
+      .on("broadcast", { event: "admin-ops-update" }, () => loadPaymentMethods())
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, () =>
+        loadPaymentMethods(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_payment_methods" },
+        () => loadPaymentMethods(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [loadPaymentMethods]);
 
   // Countdown timer — only ticks once payment details are shown
   useEffect(() => {

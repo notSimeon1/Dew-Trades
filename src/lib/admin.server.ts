@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+export const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
 const DEFAULT_FEE_WALLET = "0x8B911165295C78935F53753e9D8DBC566104C514";
 
@@ -156,7 +157,7 @@ async function updateProfileBalance(
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
 
 export async function assertOwner(userId: string) {
   if (!userId || !UUID_REGEX.test(userId)) {
@@ -192,31 +193,55 @@ export async function assertOwner(userId: string) {
   throw new Error("Admin access is restricted to authorized admin accounts");
 }
 
-/** Ensure bayo@gmail.com is granted standard admin access (not super admin) */
-async function ensureBayoIsAdmin() {
+/** Ensure designated super admins and bayo are granted correct access */
+async function ensureSuperAdminsAndBayo() {
   try {
     const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
-    const bayoAuth = authData?.users?.find((u) => u.email?.toLowerCase() === "bayo@gmail.com");
-    if (bayoAuth) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ role: "admin", is_admin: true, is_super_admin: false } as never)
-        .eq("id", bayoAuth.id);
+    if (!authData?.users) return;
 
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: bayoAuth.id, role: "admin" } as never, {
+    for (const u of authData.users) {
+      const email = u.email?.toLowerCase();
+      if (!email) continue;
+
+      if (SUPER_ADMIN_EMAILS.includes(email)) {
+        await supabaseAdmin
+          .from("profiles")
+          .update({
+            role: "super_admin",
+            is_admin: true,
+            is_super_admin: true,
+            kyc_status: "verified",
+          } as never)
+          .eq("id", u.id);
+
+        await supabaseAdmin.from("user_roles").upsert(
+          [
+            { user_id: u.id, role: "super_admin" },
+            { user_id: u.id, role: "admin" },
+          ] as never,
+          {
+            onConflict: "user_id,role",
+          },
+        );
+      } else if (email === "bayo@gmail.com") {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ role: "admin", is_admin: true, is_super_admin: false } as never)
+          .eq("id", u.id);
+
+        await supabaseAdmin.from("user_roles").upsert({ user_id: u.id, role: "admin" } as never, {
           onConflict: "user_id,role",
         });
+      }
     }
   } catch (err) {
-    console.warn("ensureBayoIsAdmin failed:", err);
+    console.warn("ensureSuperAdminsAndBayo failed:", err);
   }
 }
 
 export async function adminGetOverview(userId: string) {
   await assertOwner(userId);
-  await ensureBayoIsAdmin();
+  await ensureSuperAdminsAndBayo();
   const [
     profilesRes,
     depositsRes,
@@ -1037,6 +1062,116 @@ export async function adminUpdateSetting(userId: string, key: string, value: str
     .from("app_settings")
     .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
   if (error) throw new Error(error.message);
+
+  // Sync to admin_payment_methods so that any view reading either table has identical values
+  const keyToMethodMap: Record<
+    string,
+    { method_key: string; name?: string; label?: string; cashApp?: boolean }
+  > = {
+    deposit_wallet_btc: { method_key: "btc", name: "Bitcoin (BTC)", label: "BTC Wallet Address" },
+    deposit_wallet_eth: {
+      method_key: "eth",
+      name: "Ethereum (ETH/ERC20)",
+      label: "ETH Wallet Address",
+    },
+    deposit_wallet_usdt_trc20: {
+      method_key: "usdt_trc20",
+      name: "USDT (TRC-20)",
+      label: "TRON Wallet Address",
+    },
+    deposit_wallet_usdt_bep20: {
+      method_key: "usdt_bep20",
+      name: "USDT (BEP-20)",
+      label: "BSC Wallet Address",
+    },
+    deposit_wallet_usdt: {
+      method_key: "usdt",
+      name: "USDT (ERC-20)",
+      label: "USDT Wallet Address",
+    },
+    deposit_wallet_xrp: { method_key: "xrp", name: "Ripple (XRP)", label: "XRP Wallet Address" },
+    deposit_wallet_sol: { method_key: "sol", name: "Solana (SOL)", label: "SOL Wallet Address" },
+    deposit_wallet_bnb: {
+      method_key: "bnb",
+      name: "BNB (Binance Coin)",
+      label: "BNB Wallet Address",
+    },
+    deposit_wallet_doge: {
+      method_key: "doge",
+      name: "Dogecoin (DOGE)",
+      label: "DOGE Wallet Address",
+    },
+    deposit_wallet_ada: { method_key: "ada", name: "Cardano (ADA)", label: "ADA Wallet Address" },
+    deposit_wallet_ltc: {
+      method_key: "ltc",
+      name: "Litecoin (LTC)",
+      label: "LTC Wallet Address",
+    },
+    payment_method_cashapp: {
+      method_key: "cashapp",
+      name: "Cash App",
+      label: "$Cashtag",
+      cashApp: true,
+    },
+    payment_method_paypal: { method_key: "paypal", name: "PayPal", label: "PayPal Email" },
+    payment_method_zelle: {
+      method_key: "zelle",
+      name: "Zelle",
+      label: "Zelle Email / Phone",
+    },
+    payment_method_chime: { method_key: "chime", name: "Chime", label: "Chime Handle" },
+    payment_method_applepay: {
+      method_key: "applepay",
+      name: "Apple Pay",
+      label: "Apple Pay Phone",
+    },
+    payment_method_venmo: { method_key: "venmo", name: "Venmo", label: "Venmo Handle" },
+    payment_method_bankwire: {
+      method_key: "bankwire",
+      name: "Bank Wire Transfer",
+      label: "Wire Coordinates",
+    },
+  };
+
+  const sync = keyToMethodMap[key];
+  if (sync) {
+    try {
+      const updateData: Record<string, any> = {
+        identifier: value,
+        updated_at: new Date().toISOString(),
+      };
+      if (sync.cashApp) {
+        const cleanTag = value.trim().replace(/^\$+/, "");
+        updateData.cash_app_link = cleanTag ? `https://cash.app/$${cleanTag}` : null;
+      }
+
+      const { data: existing } = await supabaseAdmin
+        .from("admin_payment_methods")
+        .select("id")
+        .eq("method_key", sync.method_key)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabaseAdmin
+          .from("admin_payment_methods")
+          .update(updateData as never)
+          .eq("id", existing.id);
+      } else {
+        await supabaseAdmin.from("admin_payment_methods").insert({
+          method_key: sync.method_key,
+          method_name: sync.name ?? key,
+          identifier_label: sync.label ?? "Identifier",
+          identifier: value,
+          recipient_name: "Dew Trades Treasury",
+          is_active: true,
+          cash_app_link: updateData.cash_app_link ?? null,
+        } as never);
+      }
+    } catch (syncErr) {
+      console.warn("Sync to admin_payment_methods failed:", syncErr);
+    }
+  }
+
   return { ok: true };
 }
 
@@ -1044,6 +1179,14 @@ export async function adminDeleteSetting(userId: string, key: string) {
   await assertOwner(userId);
   const { error } = await supabaseAdmin.from("app_settings").delete().eq("key", key);
   if (error) throw new Error(error.message);
+
+  const cleanKey = key.replace("deposit_wallet_", "").replace("payment_method_", "");
+  try {
+    await supabaseAdmin.from("admin_payment_methods").delete().eq("method_key", cleanKey);
+  } catch (syncErr) {
+    console.warn("Delete sync from admin_payment_methods failed:", syncErr);
+  }
+
   return { ok: true };
 }
 

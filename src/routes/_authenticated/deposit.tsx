@@ -144,10 +144,10 @@ const CRYPTOS: CryptoOption[] = [
 
 const DEFAULT_DEPOSIT_WALLETS: Record<string, string> = {
   deposit_wallet_xrp: "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh",
-  deposit_wallet_usdt_trc20: "TYDzsYUEpvnYmQk4zGP9sWWcTEd3YiWULy",
+  deposit_wallet_usdt_trc20: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   deposit_wallet_usdt_bep20: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
-  deposit_wallet_btc: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-  deposit_wallet_eth: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+  deposit_wallet_btc: "bc1qx96yh78eq52yrfe7fqk9hhcgr9w886s7pffjay",
+  deposit_wallet_eth: "0x8B911165295C78935F53753e9D8DBC566104C514",
   deposit_wallet_sol: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
   deposit_wallet_bnb: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
   deposit_wallet_doge: "D8vERFXvPZ29KkK7hKkL7mH5n8mPZ8kH8",
