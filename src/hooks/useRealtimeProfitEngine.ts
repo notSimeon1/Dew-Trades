@@ -57,7 +57,9 @@ export function useRealtimeProfitEngine() {
               .update({
                 profit_accumulated: computedProfit,
               } as never)
-              .eq("id", bot.id);
+              .eq("id", bot.id)
+              .then(() => {})
+              .catch(() => {});
           }
         });
 
@@ -72,7 +74,9 @@ export function useRealtimeProfitEngine() {
               .update({
                 total_profit: computedProfit,
               } as never)
-              .eq("id", alloc.id);
+              .eq("id", alloc.id)
+              .then(() => {})
+              .catch(() => {});
           }
         });
 

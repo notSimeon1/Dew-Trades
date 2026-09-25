@@ -244,9 +244,13 @@ export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
 
       const b = bot as any;
       const timing = calculateBotProfitByTime(b);
-      const profit = Number(timing.totalProfit.toFixed(2));
-      if (profit <= 0) {
-        return { success: false, message: "No accumulated profit to harvest at this time." };
+      const rawProfit = Math.max(timing.accruedProfit, Number(b.profit_accumulated ?? 0));
+      const profit = Number(rawProfit.toFixed(2));
+      if (profit < 0.01) {
+        return {
+          success: false,
+          message: "Accumulated profit must be at least $0.01 to harvest.",
+        };
       }
 
       // Fetch user profile
@@ -278,12 +282,21 @@ export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
 
       // Reset bot accumulated profit and stamp last_payout_at to now
       const nowIso = new Date().toISOString();
+      const isExpired =
+        timing.isExpired || (b.expires_at ? new Date() >= new Date(b.expires_at) : false);
+
+      const updateBotPayload: Record<string, any> = {
+        profit_accumulated: 0,
+        last_payout_at: nowIso,
+      };
+
+      if (isExpired) {
+        updateBotPayload.status = "completed";
+      }
+
       const { error: updateBotErr } = await supabaseAdmin
         .from("user_active_bots" as any)
-        .update({
-          profit_accumulated: 0,
-          last_payout_at: nowIso,
-        })
+        .update(updateBotPayload)
         .eq("id", data.activeBotId);
 
       if (updateBotErr) {
@@ -306,7 +319,10 @@ export const harvestBotProfitServerFn = createServerFn({ method: "POST" })
         harvestedAmount: profit,
         timeElapsedLabel: timing.timeSinceLastHarvestLabel,
         newLastPayoutAt: nowIso,
-        message: `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
+        isCompleted: isExpired,
+        message: isExpired
+          ? `Final profit of $${profit.toFixed(2)} harvested! Bot has completed its runtime.`
+          : `Successfully harvested $${profit.toFixed(2)} to your balance (${timing.timeSinceLastHarvestLabel})!`,
       };
     } catch (err: any) {
       return { success: false, message: err?.message || "Failed to harvest profit." };
@@ -391,6 +407,163 @@ export const terminateBotServerFn = createServerFn({ method: "POST" })
       };
     } catch (err: any) {
       return { success: false, message: err?.message || "Failed to settle bot." };
+    }
+  });
+
+export const activateCopyTradingServerFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: { userId: string; tierId: string; amount: number; mode: "live" | "demo" }) => data,
+  )
+  .handler(async ({ data }) => {
+    try {
+      // 1. Check user profile & suspension status
+      const { data: prof, error: profErr } = await supabaseAdmin
+        .from("profiles" as any)
+        .select("id, is_suspended, demo_balance, live_balance, account_balance, available_cash")
+        .eq("id", data.userId)
+        .single();
+
+      if (profErr || !prof) {
+        return { success: false, message: "User profile not found." };
+      }
+
+      if ((prof as any).is_suspended) {
+        return {
+          success: false,
+          message: "Account suspended — copy trading is disabled. Contact support.",
+        };
+      }
+
+      // 2. Fetch copy trading tier
+      const { data: tier, error: tierErr } = await supabaseAdmin
+        .from("copy_trading_tiers" as any)
+        .select("*")
+        .eq("id", data.tierId)
+        .eq("is_active", true)
+        .single();
+
+      if (tierErr || !tier) {
+        return {
+          success: false,
+          message: "Selected copy trading tier is not active or available.",
+        };
+      }
+
+      const tierData = tier as any;
+      const minCapital = Number(tierData.required_capital ?? 100);
+      if (data.amount < minCapital) {
+        return {
+          success: false,
+          message: `Minimum allocation for ${tierData.tier_name || "this tier"} is $${minCapital}.`,
+        };
+      }
+
+      // 3. Balance verification
+      const isDemo = data.mode === "demo";
+      const availableBalance = isDemo
+        ? Number((prof as any).demo_balance ?? 10000)
+        : Number(
+            (prof as any).available_cash ??
+              (prof as any).live_balance ??
+              (prof as any).account_balance ??
+              0,
+          );
+
+      if (availableBalance < data.amount) {
+        return {
+          success: false,
+          message: `Insufficient balance. Available: $${availableBalance.toFixed(2)}, Required: $${data.amount.toFixed(2)}`,
+        };
+      }
+
+      // 4. Deduct balance from specified mode
+      const newBalance = Number((availableBalance - data.amount).toFixed(2));
+      if (isDemo) {
+        const { error: balErr } = await supabaseAdmin
+          .from("profiles" as any)
+          .update({ demo_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq("id", data.userId);
+        if (balErr) throw new Error("Failed to deduct demo balance.");
+      } else {
+        const { error: balErr } = await supabaseAdmin
+          .from("profiles" as any)
+          .update({
+            live_balance: newBalance,
+            account_balance: newBalance,
+            available_cash: newBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.userId);
+        if (balErr) throw new Error("Failed to deduct live balance.");
+      }
+
+      // 5. Expiration & clean tier key
+      const lockDays = Number(tierData.lock_in_days) || 30;
+      const expiresAt = new Date(Date.now() + lockDays * 24 * 60 * 60 * 1000).toISOString();
+      const cleanTierKey = isDemo
+        ? `${tierData.tier_key || "tier"}:demo`
+        : tierData.tier_key || "tier";
+
+      // 6. Insert allocation into user_copy_allocations with valid columns
+      const allocationPayload = {
+        user_id: data.userId,
+        tier_id: tierData.id,
+        tier_key: cleanTierKey,
+        allocated_amount: data.amount,
+        total_profit: 0,
+        strategist_name: tierData.strategist_name || null,
+        status: "active",
+        expires_at: expiresAt,
+      };
+
+      const { data: newAlloc, error: allocErr } = await supabaseAdmin
+        .from("user_copy_allocations" as any)
+        .insert(allocationPayload)
+        .select()
+        .single();
+
+      if (allocErr) {
+        console.error("[Copy Trading Insert Error]:", allocErr);
+        // Rollback balance deduction
+        if (isDemo) {
+          await supabaseAdmin
+            .from("profiles" as any)
+            .update({ demo_balance: availableBalance })
+            .eq("id", data.userId);
+        } else {
+          await supabaseAdmin
+            .from("profiles" as any)
+            .update({
+              live_balance: availableBalance,
+              account_balance: availableBalance,
+              available_cash: availableBalance,
+            })
+            .eq("id", data.userId);
+        }
+        return {
+          success: false,
+          message: `Failed to activate copy allocation: ${allocErr.message}`,
+        };
+      }
+
+      // 7. Record transaction
+      await supabaseAdmin.from("transactions" as any).insert({
+        user_id: data.userId,
+        type: "copy_trade",
+        amount: data.amount,
+        asset_name: `Copy Trading: ${tierData.strategist_name || tierData.tier_name}`,
+        status: "completed",
+        account_mode: data.mode,
+      });
+
+      return {
+        success: true,
+        allocationId: newAlloc?.id,
+        message: `Copy trading successfully activated with ${tierData.tier_name}!`,
+      };
+    } catch (err: any) {
+      console.error("[activateCopyTradingServerFn Exception]:", err);
+      return { success: false, message: err?.message || "Failed to activate copy trading." };
     }
   });
 

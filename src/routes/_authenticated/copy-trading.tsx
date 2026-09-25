@@ -27,7 +27,11 @@ import {
   Clock,
 } from "lucide-react";
 import { soundFX } from "@/lib/sound-engine";
-import { harvestCopyProfitServerFn, terminateCopyAllocationServerFn } from "@/lib/bot.functions";
+import {
+  activateCopyTradingServerFn,
+  harvestCopyProfitServerFn,
+  terminateCopyAllocationServerFn,
+} from "@/lib/bot.functions";
 import { calculateCopyProfitByTime } from "@/lib/profit-timing";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -162,74 +166,22 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
     }
     setBusy(true);
     try {
-      let rpcError: any = null;
-      try {
-        const { error } = await supabase.rpc(
-          "subscribe_copy_trader" as never,
-          {
-            _tier_id: tier.id,
-            _allocated_amount: usd,
-          } as never,
-        );
-        if (error) rpcError = error;
-      } catch (e) {
-        rpcError = e;
-      }
-
-      if (rpcError) {
-        console.warn("[subscribe_copy_trader RPC failed, performing client fallback]", rpcError);
-        const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("demo_balance, live_balance, account_balance, available_cash")
-          .eq("id", user!.id)
-          .single();
-        const currentBal = Number((prof as any)?.[balanceCol] ?? 0);
-        if (currentBal < usd) throw new Error("Insufficient balance");
-
-        const newBal = currentBal - usd;
-        const updatePayload: Record<string, any> = { [balanceCol]: newBal };
-        if (mode === "live") {
-          updatePayload.account_balance = newBal;
-          updatePayload.available_cash = newBal;
-        }
-
-        const { error: balErr } = await supabase
-          .from("profiles")
-          .update(updatePayload as never)
-          .eq("id", user!.id);
-        if (balErr) throw balErr;
-
-        const expiresAt = new Date(
-          Date.now() + (Number(tier.lock_in_days) || 30) * 24 * 60 * 60 * 1000,
-        ).toISOString();
-
-        const cleanTierKey =
-          mode === "demo" ? `${tier.tier_key || "tier"}:demo` : tier.tier_key || "tier";
-
-        const { error: copyErr } = await supabase.from("user_copy_allocations").insert({
-          user_id: user!.id,
-          tier_id: tier.id,
-          tier_key: cleanTierKey,
-          allocated_amount: usd,
-          total_profit: 0,
-          strategist_name: tier.strategist_name || null,
-          status: "active",
-          expires_at: expiresAt,
-        } as never);
-        if (copyErr) throw copyErr;
-
-        await supabase.from("transactions").insert({
-          user_id: user!.id,
-          type: "copy_trade",
+      const res = await activateCopyTradingServerFn({
+        data: {
+          userId: user!.id,
+          tierId: tier.id,
           amount: usd,
-          asset_name: `Copy Trading: ${tier.strategist_name || tier.tier_name}`,
-          status: "completed",
-          account_mode: mode,
-        } as never);
+          mode,
+        },
+      });
+
+      if (!res?.success) {
+        throw new Error(res?.message || "Activation failed");
       }
 
-      toast.success(`Copy trading activated with ${tier.tier_name}!`);
+      toast.success(res.message || `Copy trading activated with ${tier.tier_name}!`);
+      soundFX.playTradeSuccess();
+      soundFX.triggerHaptic(50);
       await refreshBalances();
       window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
       qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });

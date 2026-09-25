@@ -1,12 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  activateBotServerFn,
-  harvestBotProfitServerFn,
-  terminateBotServerFn,
-} from "@/lib/bot.functions";
+import { activateBotServerFn, harvestBotProfitServerFn } from "@/lib/bot.functions";
 import { calculateBotProfitByTime } from "@/lib/profit-timing";
 import { soundFX } from "@/lib/sound-engine";
 import { useAuth } from "@/lib/auth-context";
@@ -65,19 +61,34 @@ function AiBotsPage() {
     },
   });
 
-  const { data: activeBots } = useQuery({
+  const { data: rawActiveBots } = useQuery({
     queryKey: ["my_active_bots", user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("user_active_bots")
         .select("*, trading_bots(name, tier_key)")
         .eq("user_id", user!.id)
+        .in("status", ["active", "running"])
         .order("created_at", { ascending: false });
       return data ?? [];
     },
     enabled: !!user,
-    staleTime: 15000,
+    staleTime: 5000,
+    refetchInterval: 10000,
   });
+
+  const activeBots = useMemo(() => {
+    if (!rawActiveBots) return [];
+    const nowMs = Date.now();
+    return rawActiveBots.filter((b: any) => {
+      if (b.status !== "active" && b.status !== "running") return false;
+      const timing = calculateBotProfitByTime(b, nowMs);
+      const rawProfit = Math.max(timing.accruedProfit, Number(b.profit_accumulated ?? 0));
+      // Once expired and last profit harvested ($0 left), hide the bot info box completely
+      if (timing.isExpired && rawProfit <= 0) return false;
+      return true;
+    });
+  }, [rawActiveBots]);
 
   return (
     <div className="space-y-6">
@@ -541,8 +552,6 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
   const qc = useQueryClient();
   const { refreshBalances, applyOptimisticBalance } = useAccountMode();
   const [harvesting, setHarvesting] = useState(false);
-  const [settling, setSettling] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [overrideLastPayoutAt, setOverrideLastPayoutAt] = useState<string | null>(null);
 
@@ -557,20 +566,33 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
     : bot;
   const timing = calculateBotProfitByTime(effectiveBot, now);
   const invested = Number(bot.invested_amount ?? 0);
-  const profit = timing.totalProfit;
-  const totalReturn = invested + profit;
+  const rawProfit = Math.max(timing.accruedProfit, Number(effectiveBot.profit_accumulated ?? 0));
+  const harvestableProfit = Number(rawProfit.toFixed(2));
   const isRunning = bot.status === "active" || bot.status === "running";
 
+  // If the bot is completed/closed, or expired and fully harvested, hide it completely
+  if (!isRunning || (timing.isExpired && rawProfit <= 0)) {
+    return null;
+  }
+
+  // Display live second-by-second profit: shows 2 decimal places if >= $0.01,
+  // or 4 decimal places if < $0.01 so the user visibly watches the accumulation in real time!
+  const displayProfit =
+    rawProfit >= 0.01 ? rawProfit.toFixed(2) : rawProfit > 0 ? rawProfit.toFixed(4) : "0.00";
+
   const handleHarvest = async () => {
-    if (profit <= 0) {
-      toast.info("Earnings accumulate continuously. Harvest is available once profit > $0.00.");
+    if (rawProfit < 0.01) {
+      toast.info(
+        "Harvest unlocks once profit reaches at least $0.01. Earnings accumulate every second.",
+      );
       return;
     }
     setHarvesting(true);
+    const harvestAmount = Number(rawProfit.toFixed(2));
     // Optimistically bump balance immediately with zero visual lag
     applyOptimisticBalance({
-      liveDelta: bot.account_mode === "live" ? profit : 0,
-      demoDelta: bot.account_mode === "demo" ? profit : 0,
+      liveDelta: bot.account_mode === "live" ? harvestAmount : 0,
+      demoDelta: bot.account_mode === "demo" ? harvestAmount : 0,
     });
     try {
       const res = await harvestBotProfitServerFn({
@@ -580,14 +602,22 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
         soundFX.playDepositBonus();
         soundFX.triggerHaptic(50);
         toast.success(res.message);
-        const newIso = (res as any).newLastPayoutAt || new Date().toISOString();
-        setOverrideLastPayoutAt(newIso);
-        qc.setQueriesData({ queryKey: ["my_active_bots"] }, (old: any) => {
-          if (!Array.isArray(old)) return old;
-          return old.map((b) =>
-            b.id === bot.id ? { ...b, profit_accumulated: 0, last_payout_at: newIso } : b,
-          );
-        });
+        if (res.isCompleted) {
+          // Final profit harvested on expired bot — remove it immediately so the box disappears
+          qc.setQueriesData({ queryKey: ["my_active_bots"] }, (old: any) => {
+            if (!Array.isArray(old)) return old;
+            return old.filter((b) => b.id !== bot.id);
+          });
+        } else {
+          const newIso = (res as any).newLastPayoutAt || new Date().toISOString();
+          setOverrideLastPayoutAt(newIso);
+          qc.setQueriesData({ queryKey: ["my_active_bots"] }, (old: any) => {
+            if (!Array.isArray(old)) return old;
+            return old.map((b) =>
+              b.id === bot.id ? { ...b, profit_accumulated: 0, last_payout_at: newIso } : b,
+            );
+          });
+        }
         await refreshBalances();
         window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
         qc.invalidateQueries({ queryKey: ["my_active_bots"] });
@@ -602,32 +632,6 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
       await refreshBalances();
     } finally {
       setHarvesting(false);
-    }
-  };
-
-  const handleSettle = async () => {
-    setSettling(true);
-    try {
-      const res = await terminateBotServerFn({
-        data: { userId, activeBotId: bot.id },
-      });
-      if (res?.success) {
-        soundFX.playSuccess();
-        soundFX.triggerHaptic(40);
-        toast.success(res.message);
-        setConfirmOpen(false);
-        await refreshBalances();
-        window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
-        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
-        qc.invalidateQueries({ queryKey: ["profile"] });
-        qc.invalidateQueries({ queryKey: ["transactions"] });
-      } else {
-        toast.error(res?.message ?? "Settlement failed");
-      }
-    } catch (err: any) {
-      toast.error(err?.message ?? "Settlement error");
-    } finally {
-      setSettling(false);
     }
   };
 
@@ -697,7 +701,7 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="text-right mr-1">
             <div className="text-sm sm:text-base font-bold text-emerald-400 tabular-nums">
-              +${profit.toFixed(2)}
+              +${displayProfit}
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
               Harvestable Profit
@@ -711,90 +715,39 @@ function ActiveBotItem({ bot, userId }: { bot: any; userId: string }) {
                 : "bg-muted text-muted-foreground text-[10px]"
             }
           >
-            {bot.status}
+            {timing.isExpired ? "Term Completed" : bot.status}
           </Badge>
 
           {isRunning && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={harvesting || profit <= 0}
-                onClick={handleHarvest}
-                className="h-8 text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200"
-                title="Collect accumulated profits directly to your cash wallet"
-              >
-                {harvesting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5 mr-1 text-amber-400" />
-                    Harvest
-                  </>
-                )}
-              </Button>
-
-              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-xs text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                    title="Stop bot early and refund capital + profit"
-                  >
-                    Settle
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Settle &amp; Close Bot</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3 py-2 text-sm">
-                    <p className="text-muted-foreground">
-                      Are you sure you want to stop{" "}
-                      <span className="font-semibold text-foreground">
-                        {bot.trading_bots?.name ?? bot.bot_name}
-                      </span>
-                      ?
-                    </p>
-                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Principal Capital:</span>
-                        <span className="font-bold tabular-nums">${invested.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Accrued Profit ({timing.timeSinceLastHarvestLabel}):
-                        </span>
-                        <span className="font-bold text-emerald-400 tabular-nums">
-                          +${profit.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="border-t border-white/10 pt-2 flex justify-between font-bold text-sm">
-                        <span>Total Refund to Wallet:</span>
-                        <span className="text-amber-400 tabular-nums">
-                          ${totalReturn.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
-                      Keep Running
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={settling}
-                      onClick={handleSettle}
-                    >
-                      {settling ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                      Confirm &amp; Settle
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={harvesting || rawProfit < 0.01}
+              onClick={handleHarvest}
+              className={`h-8 text-xs font-semibold shadow-sm transition-all ${
+                rawProfit >= 0.01
+                  ? "border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/25 hover:text-amber-100"
+                  : "border-white/10 text-muted-foreground opacity-60 cursor-not-allowed"
+              }`}
+              title={
+                rawProfit >= 0.01
+                  ? "Harvest accumulated profit to your wallet now. You can keep harvesting anytime until the final day!"
+                  : "Profit accumulates every second. Harvest unlocks once accumulated profit reaches $0.01."
+              }
+            >
+              {harvesting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Sparkles
+                    className={`h-3.5 w-3.5 mr-1 ${
+                      rawProfit >= 0.01 ? "text-amber-400 animate-pulse" : "text-muted-foreground"
+                    }`}
+                  />
+                  Harvest{rawProfit >= 0.01 ? ` (+$${rawProfit.toFixed(2)})` : ""}
+                </>
+              )}
+            </Button>
           )}
         </div>
       </div>
