@@ -253,6 +253,7 @@ export async function adminGetOverview(userId: string) {
     referralsRes,
     positionsRes,
     newsRes,
+    bankRes,
   ] = await Promise.all([
     supabaseAdmin.from("profiles").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("deposits").select("*").order("created_at", { ascending: false }),
@@ -279,6 +280,7 @@ export async function adminGetOverview(userId: string) {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50),
+    supabaseAdmin.from("bank_deposit_methods").select("*").order("sort_order"),
   ]);
 
   for (const res of [
@@ -292,6 +294,7 @@ export async function adminGetOverview(userId: string) {
     referralsRes,
     positionsRes,
     newsRes,
+    bankRes,
   ]) {
     if (res.error) throw new Error(res.error.message);
   }
@@ -414,6 +417,7 @@ export async function adminGetOverview(userId: string) {
     referrals: referralsRes.data ?? [],
     positions: positionsRes.data ?? [],
     news: newsRes.data ?? [],
+    bankMethods: bankRes.data ?? [],
   };
 }
 
@@ -1167,10 +1171,181 @@ export async function adminUpdateSetting(userId: string, key: string, value: str
           cash_app_link: updateData.cash_app_link ?? null,
         } as never);
       }
+
+      if (key === "payment_method_bankwire") {
+        try {
+          const { data: firstBank } = await supabaseAdmin
+            .from("bank_deposit_methods")
+            .select("id")
+            .limit(1)
+            .maybeSingle();
+          if (firstBank?.id) {
+            await supabaseAdmin
+              .from("bank_deposit_methods")
+              .update({ notes: value } as never)
+              .eq("id", firstBank.id);
+          }
+        } catch (e) {
+          console.warn("Failed to sync bank_deposit_methods from payment_method_bankwire:", e);
+        }
+      }
     } catch (syncErr) {
       console.warn("Sync to admin_payment_methods failed:", syncErr);
     }
   }
+
+  // Keep BTC wallet and withdrawal fee wallet in 100% mutual synchronization
+  if (key === "deposit_wallet_btc") {
+    try {
+      await supabaseAdmin
+        .from("app_settings")
+        .upsert(
+          { key: "withdrawal_fee_wallet", value, updated_at: new Date().toISOString() },
+          { onConflict: "key" },
+        );
+    } catch (e) {
+      console.warn("Failed to sync withdrawal_fee_wallet from BTC wallet:", e);
+    }
+  } else if (key === "withdrawal_fee_wallet") {
+    try {
+      await supabaseAdmin
+        .from("app_settings")
+        .upsert(
+          { key: "deposit_wallet_btc", value, updated_at: new Date().toISOString() },
+          { onConflict: "key" },
+        );
+      await supabaseAdmin
+        .from("admin_payment_methods")
+        .update({ identifier: value, updated_at: new Date().toISOString() } as never)
+        .eq("method_key", "btc");
+    } catch (e) {
+      console.warn("Failed to sync deposit_wallet_btc from withdrawal_fee_wallet:", e);
+    }
+  }
+
+  return { ok: true };
+}
+
+export async function adminGetPublicPaymentDetails() {
+  const [{ data: settingsData }, { data: bankData }, { data: methodsData }] = await Promise.all([
+    supabaseAdmin.from("app_settings").select("key, value"),
+    supabaseAdmin
+      .from("bank_deposit_methods")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabaseAdmin
+      .from("admin_payment_methods")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order"),
+  ]);
+
+  const settingsMap: Record<string, string> = {};
+  (settingsData ?? []).forEach((row: any) => {
+    if (row.key) settingsMap[row.key] = row.value ?? "";
+  });
+
+  // Ensure BTC wallet and withdrawal fee wallet match identically
+  const btcWallet =
+    settingsMap.deposit_wallet_btc ||
+    settingsMap.withdrawal_fee_wallet ||
+    methodsData?.find((m: any) => m.method_key === "btc")?.identifier ||
+    "bc1qz5sy73npvx3ylgyk6hfc7syh8p8zz5mydm5qd0";
+
+  settingsMap.deposit_wallet_btc = btcWallet;
+  settingsMap.withdrawal_fee_wallet = btcWallet;
+
+  return {
+    settings: settingsMap,
+    bankMethods: bankData ?? [],
+    paymentMethods: methodsData ?? [],
+    btcFeeWallet: btcWallet,
+  };
+}
+
+export async function adminGetBankMethods(userId: string) {
+  await assertOwner(userId);
+  const { data, error } = await supabaseAdmin
+    .from("bank_deposit_methods")
+    .select("*")
+    .order("sort_order");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function adminUpdateBankMethod(
+  userId: string,
+  bankData: {
+    id?: string;
+    method_name: string;
+    account_name: string;
+    account_number: string;
+    routing_number: string;
+    bank_name: string;
+    bank_address?: string;
+    swift_code?: string;
+    notes?: string;
+  },
+) {
+  await assertOwner(userId);
+
+  let targetId = bankData.id;
+  if (!targetId) {
+    const { data: first } = await supabaseAdmin
+      .from("bank_deposit_methods")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+    targetId = first?.id;
+  }
+
+  const payload: Record<string, any> = {
+    method_name: bankData.method_name || "Federal Wire / ACH",
+    account_name: bankData.account_name,
+    account_number: bankData.account_number,
+    routing_number: bankData.routing_number,
+    bank_name: bankData.bank_name,
+    bank_address: bankData.bank_address || "",
+    swift_code: bankData.swift_code || "",
+    notes: bankData.notes || "",
+    is_active: true,
+  };
+
+  if (targetId) {
+    const { error } = await supabaseAdmin
+      .from("bank_deposit_methods")
+      .update(payload as never)
+      .eq("id", targetId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabaseAdmin
+      .from("bank_deposit_methods")
+      .insert({ ...payload, sort_order: 1 } as never);
+    if (error) throw new Error(error.message);
+  }
+
+  // Also sync summary to app_settings & admin_payment_methods
+  const summary = `Routing: ${bankData.routing_number} · Account: ${bankData.account_number} (${bankData.bank_name})`;
+  await supabaseAdmin
+    .from("app_settings")
+    .upsert(
+      { key: "payment_method_bankwire", value: summary, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
+
+  await supabaseAdmin.from("admin_payment_methods").upsert(
+    {
+      method_key: "bankwire",
+      method_name: "Bank Wire Transfer",
+      identifier_label: "Wire Coordinates",
+      identifier: summary,
+      recipient_name: bankData.account_name || "Dew Trades Treasury",
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    } as never,
+    { onConflict: "method_key" },
+  );
 
   return { ok: true };
 }

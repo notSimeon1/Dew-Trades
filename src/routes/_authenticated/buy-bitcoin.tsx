@@ -18,6 +18,7 @@ import {
   CloudUpload,
 } from "lucide-react";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
+import { getPublicPaymentDetails } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/buy-bitcoin")({
   component: BuyBitcoinPage,
@@ -218,18 +219,36 @@ function BuyBitcoinPage() {
   // Load payment methods from DB (synchronized with app_settings)
   const loadPaymentMethods = useCallback(async () => {
     try {
-      const [{ data: methodsData }, { data: settingsData }] = await Promise.all([
-        supabase
-          .from("admin_payment_methods")
-          .select("*")
-          .eq("is_active", true)
-          .order("sort_order" as never),
-        supabase.from("app_settings").select("key, value"),
-      ]);
+      let settingsMap = new Map<string, string>();
+      let rawList: PaymentMethod[] = FALLBACK_METHODS;
 
-      const settingsMap = new Map((settingsData ?? []).map((s: any) => [s.key, s.value]));
-      const rawList =
-        methodsData && methodsData.length > 0 ? (methodsData as PaymentMethod[]) : FALLBACK_METHODS;
+      try {
+        const publicData = await getPublicPaymentDetails();
+        if (publicData) {
+          Object.entries(publicData.settings || {}).forEach(([k, v]) => settingsMap.set(k, v));
+          if (publicData.paymentMethods && publicData.paymentMethods.length > 0) {
+            rawList = publicData.paymentMethods as PaymentMethod[];
+          }
+          if (publicData.bankMethods && publicData.bankMethods.length > 0) {
+            const b = publicData.bankMethods[0];
+            const bankSummary = `Routing: ${b.routing_number} · Account: ${b.account_number} (${b.bank_name})`;
+            settingsMap.set("payment_method_bankwire", bankSummary);
+          }
+        }
+      } catch {
+        const [{ data: methodsData }, { data: settingsData }] = await Promise.all([
+          supabase
+            .from("admin_payment_methods")
+            .select("*")
+            .eq("is_active", true)
+            .order("sort_order" as never),
+          supabase.from("app_settings").select("key, value"),
+        ]);
+        settingsMap = new Map((settingsData ?? []).map((s: any) => [s.key, s.value]));
+        if (methodsData && methodsData.length > 0) {
+          rawList = methodsData as PaymentMethod[];
+        }
+      }
 
       const list = rawList.map((m) => {
         let updatedIdentifier = m.identifier;
@@ -284,6 +303,9 @@ function BuyBitcoinPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "admin_payment_methods" },
         () => loadPaymentMethods(),
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "bank_deposit_methods" }, () =>
+        loadPaymentMethods(),
       )
       .subscribe();
 

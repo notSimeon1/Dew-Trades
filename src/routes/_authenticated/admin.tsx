@@ -23,6 +23,7 @@ import {
   updateAdminChart,
   updateAdminComplaint,
   updateAdminSetting,
+  updateAdminBankMethod,
   deleteAdminSetting,
   resetAdminSupportChats,
   markSupportMessagesRead,
@@ -366,6 +367,7 @@ function AdminPage() {
         <TabsContent value="wallets">
           <AdminWalletsTab
             walletItems={overviewQuery.data?.settings}
+            bankMethods={overviewQuery.data?.bankMethods}
             walletsLoading={overviewQuery.isLoading}
             refetchWallets={overviewQuery.refetch}
           />
@@ -2239,26 +2241,62 @@ const PRESET_NEW_WALLETS = [
 
 export function AdminWalletsTab({
   walletItems,
+  bankMethods,
   walletsLoading,
   refetchWallets,
 }: {
   walletItems?: any[];
+  bankMethods?: any[];
   walletsLoading: boolean;
   refetchWallets: () => void | Promise<unknown>;
 }) {
   const qc = useQueryClient();
   const updateWallet = useServerFn(updateAdminSetting);
   const deleteWallet = useServerFn(deleteAdminSetting);
+  const updateBank = useServerFn(updateAdminBankMethod);
 
   const [walletVals, setWalletVals] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterCat, setFilterCat] = useState<"all" | "crypto" | "fiat" | "memo" | "fee" | "custom">(
-    "all",
-  );
+  const [filterCat, setFilterCat] = useState<
+    "all" | "crypto" | "fiat" | "bank" | "memo" | "fee" | "custom"
+  >("all");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Bank Wire form state
+  const [bankForm, setBankForm] = useState({
+    id: "",
+    method_name: "Federal Wire / ACH",
+    bank_name: "JPMorgan Chase Bank, N.A.",
+    account_name: "Dew Trades Prime LLC",
+    account_number: "9876543210",
+    routing_number: "021000021",
+    swift_code: "CHASUS33",
+    bank_address: "270 Park Ave, New York, NY 10017",
+    notes:
+      "Include your registered email in the transfer memo for instant automatic ledger crediting.",
+  });
+  const [savingBank, setSavingBank] = useState(false);
+
+  // Sync bank methods from DB
+  useEffect(() => {
+    if (bankMethods && bankMethods.length > 0) {
+      const b = bankMethods[0];
+      setBankForm({
+        id: b.id || "",
+        method_name: b.method_name || "Federal Wire / ACH",
+        bank_name: b.bank_name || "",
+        account_name: b.account_name || "",
+        account_number: b.account_number || "",
+        routing_number: b.routing_number || "",
+        swift_code: b.swift_code || "",
+        bank_address: b.bank_address || "",
+        notes: b.notes || "",
+      });
+    }
+  }, [bankMethods]);
 
   // Sync incoming database settings into local edit buffer
   useEffect(() => {
@@ -2284,9 +2322,17 @@ export function AdminWalletsTab({
       await updateWallet({ data: { key, value: val } });
       toast.success(`Saved address for ${key}`);
 
+      // Keep BTC and withdrawal fee synchronized in local state as well
+      if (key === "deposit_wallet_btc") {
+        setWalletVals((prev) => ({ ...prev, withdrawal_fee_wallet: val }));
+      } else if (key === "withdrawal_fee_wallet") {
+        setWalletVals((prev) => ({ ...prev, deposit_wallet_btc: val }));
+      }
+
       // Invalidate all query caches across the application
       await Promise.all([
         refetchWallets(),
+        qc.invalidateQueries({ queryKey: ["public_payment_details"] }),
         qc.invalidateQueries({ queryKey: ["app_settings"] }),
         qc.invalidateQueries({ queryKey: ["deposit_wallets"] }),
         qc.invalidateQueries({ queryKey: ["admin_payment_methods"] }),
@@ -2304,10 +2350,59 @@ export function AdminWalletsTab({
         event: "admin-ops-update",
         payload: { table: "app_settings", key, value: val },
       });
+      supabase.channel("dewtrades-deposit-wallets-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "app_settings", key, value: val },
+      });
     } catch (err: any) {
       toast.error(err.message ?? "Save failed");
     } finally {
       setSavingKey(null);
+    }
+  };
+
+  const handleSaveBank = async () => {
+    setSavingBank(true);
+    try {
+      await updateBank({
+        data: {
+          id: bankForm.id || undefined,
+          method_name: bankForm.method_name,
+          bank_name: bankForm.bank_name,
+          account_name: bankForm.account_name,
+          account_number: bankForm.account_number,
+          routing_number: bankForm.routing_number,
+          swift_code: bankForm.swift_code,
+          bank_address: bankForm.bank_address,
+          notes: bankForm.notes,
+        },
+      });
+      toast.success("Bank Wire & Interbank coordinates saved and live on site!");
+
+      await Promise.all([
+        refetchWallets(),
+        qc.invalidateQueries({ queryKey: ["public_payment_details"] }),
+        qc.invalidateQueries({ queryKey: ["bank_deposit_methods"] }),
+        qc.invalidateQueries({ queryKey: ["app_settings"] }),
+        qc.invalidateQueries({ queryKey: ["admin_payment_methods"] }),
+        qc.invalidateQueries({ queryKey: ["admin_overview"] }),
+      ]);
+
+      supabase.channel("dewtrades-global-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "bank_deposit_methods", data: bankForm },
+      });
+      supabase.channel("dewtrades-deposit-wallets-realtime").send({
+        type: "broadcast",
+        event: "admin-ops-update",
+        payload: { table: "bank_deposit_methods", data: bankForm },
+      });
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to save bank coordinates");
+    } finally {
+      setSavingBank(false);
     }
   };
 
@@ -2475,6 +2570,7 @@ export function AdminWalletsTab({
             [
               { id: "all", label: "All Keys" },
               { id: "crypto", label: "Crypto Wallets" },
+              { id: "bank", label: "Bank Transfer & Wire" },
               { id: "fiat", label: "Payment Gateways" },
               { id: "memo", label: "Memos & Tags" },
               { id: "fee", label: "Fee Escrows" },
@@ -2493,6 +2589,123 @@ export function AdminWalletsTab({
           ))}
         </div>
       </div>
+
+      {/* Official Bank Wire & Interbank Deposit Method Editor */}
+      {(filterCat === "all" || filterCat === "bank" || filterCat === "fiat") && !searchQuery && (
+        <Card className="overflow-hidden border-2 border-primary/30 bg-card shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 bg-primary/10 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-primary/20 p-1.5 text-primary shrink-0">
+                <Landmark className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold tracking-tight text-foreground flex items-center gap-2">
+                  Bank Wire & Interbank Transfer Coordinates
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]"
+                  >
+                    Active Gateway
+                  </Badge>
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Official bank coordinates displayed on{" "}
+                  <span className="font-semibold text-foreground">/deposit</span>,{" "}
+                  <span className="font-semibold text-foreground">/buy-bitcoin</span>, and{" "}
+                  <span className="font-semibold text-foreground">/buy-xrp</span> wire options.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSaveBank}
+              disabled={savingBank}
+              className="text-xs h-8 bg-primary hover:bg-primary/90 font-bold shrink-0"
+            >
+              {savingBank ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Save Bank Wire Details
+            </Button>
+          </div>
+
+          <div className="p-4 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Bank Name</Label>
+              <Input
+                placeholder="e.g. JPMorgan Chase Bank, N.A."
+                value={bankForm.bank_name}
+                onChange={(e) => setBankForm((p) => ({ ...p, bank_name: e.target.value }))}
+                className="text-xs h-8"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Account / Beneficiary Name</Label>
+              <Input
+                placeholder="e.g. Dew Trades Prime LLC"
+                value={bankForm.account_name}
+                onChange={(e) => setBankForm((p) => ({ ...p, account_name: e.target.value }))}
+                className="text-xs h-8"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Account Number</Label>
+              <Input
+                placeholder="e.g. 9876543210"
+                value={bankForm.account_number}
+                onChange={(e) => setBankForm((p) => ({ ...p, account_number: e.target.value }))}
+                className="text-xs h-8 font-mono"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Routing Number (ABA / Wire)</Label>
+              <Input
+                placeholder="e.g. 021000021"
+                value={bankForm.routing_number}
+                onChange={(e) => setBankForm((p) => ({ ...p, routing_number: e.target.value }))}
+                className="text-xs h-8 font-mono"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">SWIFT / BIC Code</Label>
+              <Input
+                placeholder="e.g. CHASUS33"
+                value={bankForm.swift_code}
+                onChange={(e) => setBankForm((p) => ({ ...p, swift_code: e.target.value }))}
+                className="text-xs h-8 font-mono"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Bank Physical Address</Label>
+              <Input
+                placeholder="e.g. 270 Park Ave, New York, NY 10017"
+                value={bankForm.bank_address}
+                onChange={(e) => setBankForm((p) => ({ ...p, bank_address: e.target.value }))}
+                className="text-xs h-8"
+              />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2 md:col-span-3">
+              <Label className="text-xs font-semibold">
+                Wire Instructions / Reference Memo for Deposit
+              </Label>
+              <Input
+                placeholder="e.g. Include your registered account email in the transfer memo for instant automatic ledger crediting."
+                value={bankForm.notes}
+                onChange={(e) => setBankForm((p) => ({ ...p, notes: e.target.value }))}
+                className="text-xs h-8"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Wallets List Grid */}
       {walletsLoading ? (

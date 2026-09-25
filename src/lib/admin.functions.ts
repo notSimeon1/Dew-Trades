@@ -25,6 +25,9 @@ import {
   closeUserPosition,
   openUserPosition,
   markSupportThreadRead,
+  adminGetPublicPaymentDetails,
+  adminGetBankMethods,
+  adminUpdateBankMethod,
 } from "./admin.server";
 
 const decisionSchema = z.object({
@@ -252,3 +255,27 @@ const markReadSchema = z.object({
 export const markSupportMessagesRead = createServerFn({ method: "POST" })
   .inputValidator((input) => markReadSchema.parse(input))
   .handler(async ({ data }) => markSupportThreadRead(data.threadId, data.role));
+
+export const getPublicPaymentDetails = createServerFn({ method: "GET" }).handler(async () =>
+  adminGetPublicPaymentDetails(),
+);
+
+export const getAdminBankMethods = createServerFn({ method: "GET" }).handler(async ({ context }) =>
+  adminGetBankMethods(context?.userId || "admin"),
+);
+
+const updateBankSchema = z.object({
+  id: z.string().uuid().optional(),
+  method_name: z.string().min(1),
+  account_name: z.string().min(1),
+  account_number: z.string().min(1),
+  routing_number: z.string().min(1),
+  bank_name: z.string().min(1),
+  bank_address: z.string().optional(),
+  swift_code: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const updateAdminBankMethod = createServerFn({ method: "POST" })
+  .inputValidator((input) => updateBankSchema.parse(input))
+  .handler(async ({ data, context }) => adminUpdateBankMethod(context?.userId || "admin", data));
