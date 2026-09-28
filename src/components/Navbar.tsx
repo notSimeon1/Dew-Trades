@@ -6,7 +6,6 @@ import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency, AVAILABLE_CURRENCIES } from "@/lib/currency-context";
 import { soundFX } from "@/lib/sound-engine";
 import { CryptoIcon } from "@/components/CryptoIcon";
-import { LiveTickerBar } from "./LiveTickerBar";
 import { Button } from "@/components/ui/button";
 import { DewLogo } from "@/components/DewLogo";
 import { supabase } from "@/integrations/supabase/client";
@@ -326,7 +325,6 @@ export function Navbar() {
 
   return (
     <>
-      <LiveTickerBar />
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07090e]/80 backdrop-blur-2xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-5">
           {/* Brand */}
