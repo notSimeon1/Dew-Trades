@@ -789,17 +789,17 @@ function BotsTab() {
         .update({
           name: String(val(b, "name")),
           capital_required: Number(val(b, "capital_required")),
-          min_roi: Math.max(20, Number(val(b, "min_roi"))),
-          max_roi: Math.max(20, Number(val(b, "max_roi")) || Number(val(b, "min_roi"))),
+          min_roi: Math.max(30, Number(val(b, "min_roi"))),
+          max_roi: Math.max(30, Number(val(b, "max_roi")) || Number(val(b, "min_roi"))),
           win_rate: Number(val(b, "win_rate")),
           duration_days: Number(val(b, "duration_days")),
           payout_interval: "daily",
           daily_payout:
             Number(val(b, "daily_payout")) ||
-            (Number(val(b, "capital_required")) * Math.max(20, Number(val(b, "min_roi")))) / 100,
+            (Number(val(b, "capital_required")) * Math.max(30, Number(val(b, "min_roi")))) / 100,
           hourly_payout:
             Number(val(b, "hourly_payout")) ||
-            (Number(val(b, "capital_required")) * Math.max(20, Number(val(b, "min_roi")))) /
+            (Number(val(b, "capital_required")) * Math.max(30, Number(val(b, "min_roi")))) /
               100 /
               24,
           status:

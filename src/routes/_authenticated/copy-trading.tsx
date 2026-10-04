@@ -35,6 +35,10 @@ import {
 import { calculateCopyProfitByTime } from "@/lib/profit-timing";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import {
+  InstitutionalGoldSuccessModal,
+  type GoldSuccessDetails,
+} from "@/components/InstitutionalGoldSuccessModal";
 
 export const Route = createFileRoute("/_authenticated/copy-trading")({
   component: CopyTradingPage,
@@ -144,6 +148,8 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(tier.required_capital));
   const [busy, setBusy] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<GoldSuccessDetails | null>(null);
 
   const activate = async () => {
     const { data: prof } = await supabase
@@ -180,8 +186,17 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
       }
 
       toast.success(res.message || `Copy trading activated with ${tier.tier_name}!`);
-      soundFX.playTradeSuccess();
-      soundFX.triggerHaptic(50);
+      setSuccessDetails({
+        type: "copy",
+        title: `Copying ${tier.strategist_name}`,
+        subtitle: `${tier.tier_name} allocation deployed with automated order mirroring and real-time second yield accrual.`,
+        tierName: tier.tier_name,
+        amount: usd,
+        currency: "USD",
+        dailyRoi: 18.0,
+        durationDays: tier.lock_in_days || 30,
+      });
+      setSuccessModalOpen(true);
       await refreshBalances();
       window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
       qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });
@@ -201,6 +216,11 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
     >
+      <InstitutionalGoldSuccessModal
+        open={successModalOpen}
+        onOpenChange={setSuccessModalOpen}
+        details={successDetails}
+      />
       <Card className="relative overflow-hidden">
         <div className="bg-gradient-hero h-2" />
         <div className="p-5 space-y-4">

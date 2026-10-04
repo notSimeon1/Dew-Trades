@@ -141,9 +141,9 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         if (updateBalErr) throw new Error("Failed to deduct USD live balance.");
       }
 
-      // 4. Calculate payouts & expiration date (strictly >= 20% daily ROI)
-      const minRoi = Math.max(20, Number(botData.min_roi ?? 20));
-      const maxRoi = Math.max(20, Number(botData.max_roi ?? 20));
+      // 4. Calculate payouts & expiration date (strictly >= 30% daily ROI -> >= 3x return in 10 days)
+      const minRoi = Math.max(30, Number(botData.min_roi ?? 30));
+      const maxRoi = Math.max(30, Number(botData.max_roi ?? 30));
       const avgRoi = (minRoi + maxRoi) / 2;
       const dailyPayout = Number(((data.amount * avgRoi) / 100).toFixed(2));
       const hourlyPayout = Number((dailyPayout / 24).toFixed(4));

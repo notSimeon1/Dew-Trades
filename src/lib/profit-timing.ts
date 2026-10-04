@@ -61,8 +61,8 @@ export function calculateBotProfitByTime(
   const elapsedDays = elapsedSeconds / 86400;
 
   const invested = Number(bot.invested_amount) || 0;
-  // Floor daily payout at 20% of invested capital
-  const minDailyFloor = (invested * 20) / 100;
+  // Floor daily payout at 30% of invested capital (guarantees at least 3x return in 10 days)
+  const minDailyFloor = (invested * 30) / 100;
   const rawDaily = Number(bot.daily_payout) || 0;
   const dailyPayout = Math.max(rawDaily, minDailyFloor);
 
@@ -162,8 +162,8 @@ export function calculateCopyProfitByTime(
   const elapsedDays = elapsedSeconds / 86400;
 
   const allocated = Number(alloc.allocated_amount) || 0;
-  // Copy trading target: approx 0.8% - 1.0% daily ROI (~25% monthly)
-  const dailyPayout = allocated * 0.0085;
+  // Copy trading target: approx 18% daily ROI (doubles money in 7 days: 7 x 18% = 126%!)
+  const dailyPayout = allocated * 0.18;
   const ratePerSecond = dailyPayout / 86400;
 
   const accruedProfit = Number((elapsedSeconds * ratePerSecond).toFixed(4));

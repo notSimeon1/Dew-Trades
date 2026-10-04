@@ -35,6 +35,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import {
+  InstitutionalGoldSuccessModal,
+  type GoldSuccessDetails,
+} from "@/components/InstitutionalGoldSuccessModal";
 
 export const Route = createFileRoute("/_authenticated/ai-bots")({
   component: AiBotsPage,
@@ -184,6 +188,8 @@ function BotCard({
   const [amount, setAmount] = useState(String(bot.capital_required));
   const [currencyPool, setCurrencyPool] = useState<"USD" | "USDT">("USD");
   const [busy, setBusy] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<GoldSuccessDetails | null>(null);
 
   const { data: usdtBalance = 0 } = useQuery({
     queryKey: ["usdt_balance_bot_card", user?.id],
@@ -212,13 +218,13 @@ function BotCard({
     mode === "demo" ? balance : currencyPool === "USD" ? fiatLiveBalance : usdtBalance;
 
   const gradient = TIER_COLORS[bot.tier_key] ?? "from-primary to-primary/80";
-  const minRoi = Math.max(20, Number(bot.min_roi ?? 20));
-  const maxRoi = Math.max(20, Number(bot.max_roi ?? 20));
+  const minRoi = Math.max(30, Number(bot.min_roi ?? 30));
+  const maxRoi = Math.max(30, Number(bot.max_roi ?? 30));
   const isHourly = bot.payout_interval === "hourly";
   const dailyPayout =
     Number(bot.daily_payout ?? 0) || (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100;
   const hourlyPayout = Number(bot.hourly_payout ?? 0) || dailyPayout / 24;
-  const dailyRoiPct = Math.max(20, (dailyPayout / Number(bot.capital_required)) * 100);
+  const dailyRoiPct = Math.max(30, (dailyPayout / Number(bot.capital_required)) * 100);
   const duration = Number(bot.duration_days ?? 10);
   const totalReturn = dailyPayout * duration;
   const roiMultiple = totalReturn / Number(bot.capital_required);
@@ -262,6 +268,18 @@ function BotCard({
       if (res) {
         if (res.success) {
           toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
+          setSuccessDetails({
+            type: "bot",
+            title: `${bot.name} Activated`,
+            subtitle:
+              "Institutional neural routing initiated. Second-by-second profit accrual is live.",
+            tierName: bot.name,
+            amount: usd,
+            currency: currencyPool,
+            dailyRoi: dailyRoiPct,
+            durationDays: duration,
+          });
+          setSuccessModalOpen(true);
           await refreshBalances();
           window.dispatchEvent(new CustomEvent("dewtrades:refresh-balance"));
           qc.invalidateQueries({ queryKey: ["my_active_bots"] });
@@ -348,6 +366,18 @@ function BotCard({
       } as never);
 
       toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
+      setSuccessDetails({
+        type: "bot",
+        title: `${bot.name} Activated`,
+        subtitle:
+          "Institutional neural routing initiated. Second-by-second profit accrual is live.",
+        tierName: bot.name,
+        amount: usd,
+        currency: currencyPool,
+        dailyRoi: dailyRoiPct,
+        durationDays: duration,
+      });
+      setSuccessModalOpen(true);
       qc.invalidateQueries({ queryKey: ["my_active_bots"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -365,6 +395,11 @@ function BotCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.04, 0.4) }}
     >
+      <InstitutionalGoldSuccessModal
+        open={successModalOpen}
+        onOpenChange={setSuccessModalOpen}
+        details={successDetails}
+      />
       <Card className="relative overflow-hidden border-border/70">
         <div className={`h-2 bg-gradient-to-r ${gradient}`} />
         <div className="p-5 space-y-4">
