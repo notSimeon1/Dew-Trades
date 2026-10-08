@@ -157,12 +157,18 @@ function AdminPage() {
       try {
         const [{ data: roles }, { data: prof }] = await Promise.all([
           supabase.from("user_roles").select("role").eq("user_id", user.id),
-          supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("role" as any)
+            .eq("id", user.id)
+            .maybeSingle(),
         ]);
         const hasRole = (roles ?? []).some(
           (r: any) => r.role === "admin" || r.role === "super_admin",
         );
-        const hasProf = Boolean(prof?.role === "admin" || prof?.role === "super_admin");
+        const hasProf = Boolean(
+          (prof as any)?.role === "admin" || (prof as any)?.role === "super_admin",
+        );
         if (hasRole || hasProf) {
           setIsAdmin(true);
           return;
@@ -4247,7 +4253,7 @@ function AdminRolesTab({
                               role: checked ? "admin" : "user",
                               is_admin: checked,
                               is_super_admin: false,
-                            })
+                            } as any)
                             .eq("id", u.id);
 
                           // Update user_roles table

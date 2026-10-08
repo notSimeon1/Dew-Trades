@@ -697,7 +697,7 @@ function ProfilePage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      navigator.clipboard.writeText(referralCode);
+                      navigator.clipboard.writeText(referralCode || "");
                       setCopiedRef(true);
                       toast.success("Referral code copied!");
                       setTimeout(() => setCopiedRef(false), 2000);

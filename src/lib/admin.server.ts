@@ -1481,34 +1481,244 @@ export async function openUserPosition(
   entryPrice: number,
   accountMode: "demo" | "live",
 ) {
-  const { data, error } = await (supabaseAdmin as any).rpc("open_position_atomic", {
-    _user_id: userId,
-    _asset: asset,
-    _side: side,
-    _quantity: quantity,
-    _leverage: leverage,
-    _margin: margin,
-    _entry_price: entryPrice,
-    _account_mode: accountMode,
-  });
-  if (error) throw new Error(error.message);
-  return { id: data as string };
+  // 1. Validate inputs
+  if (side !== "buy" && side !== "sell") {
+    throw new Error("Invalid trade side");
+  }
+  if (accountMode !== "demo" && accountMode !== "live") {
+    throw new Error("Invalid account mode");
+  }
+  if (!margin || margin <= 0 || !entryPrice || entryPrice <= 0) {
+    throw new Error("Invalid trade values");
+  }
+
+  // Ensure userId is valid
+  if (!userId || userId === "admin") {
+    throw new Error("Authentication required to open position");
+  }
+
+  // 2. Fetch user profile
+  const { data: profile, error: profErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, is_suspended, live_balance, available_cash, account_balance, demo_balance")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profErr) throw new Error(profErr.message);
+  if (!profile) throw new Error("User profile not found");
+  if (profile.is_suspended) {
+    throw new Error("Account is suspended — trading is restricted. Contact support.");
+  }
+
+  // 3. Balance verification and deduction
+  if (accountMode === "live") {
+    const currentLive = Number(profile.live_balance ?? 0);
+    const currentAvail = Number(profile.available_cash ?? 0);
+    const currentAcct = Number(profile.account_balance ?? 0);
+
+    if (currentLive < margin && currentAvail < margin) {
+      throw new Error(
+        `Insufficient live balance. Required: $${margin.toFixed(2)}, Available: $${Math.max(currentLive, currentAvail).toFixed(2)}`,
+      );
+    }
+
+    const newLive = Math.max(0, currentLive - margin);
+    const newAvail = Math.max(0, currentAvail - margin);
+    const newAcct = Math.max(0, currentAcct - margin);
+
+    const { error: updErr } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        live_balance: newLive,
+        available_cash: newAvail,
+        account_balance: newAcct,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", userId);
+
+    if (updErr) throw new Error(updErr.message);
+  } else {
+    const currentDemo = Number(profile.demo_balance ?? 10000);
+    if (currentDemo < margin) {
+      throw new Error(
+        `Insufficient demo balance. Required: $${margin.toFixed(2)}, Available: $${currentDemo.toFixed(2)}`,
+      );
+    }
+
+    const newDemo = Math.max(0, currentDemo - margin);
+    const { error: updErr } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        demo_balance: newDemo,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", userId);
+
+    if (updErr) throw new Error(updErr.message);
+  }
+
+  // 4. Calculate liquidation price
+  const lev = leverage || 1;
+  const liqDiff = entryPrice / lev;
+  const liquidationPrice =
+    side === "buy" ? Math.max(0, entryPrice - liqDiff) : entryPrice + liqDiff;
+
+  // 5. Insert position into live_positions with exact schema columns
+  const cleanAsset = asset.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const { data: pos, error: posErr } = await supabaseAdmin
+    .from("live_positions")
+    .insert({
+      user_id: userId,
+      symbol: cleanAsset,
+      side,
+      amount: margin,
+      leverage: lev,
+      entry_price: entryPrice,
+      current_price: entryPrice,
+      liquidation_price: Number(liquidationPrice.toFixed(4)),
+      pnl: 0,
+      status: "open",
+      account_mode: accountMode,
+      opened_at: new Date().toISOString(),
+    } as never)
+    .select("id")
+    .single();
+
+  if (posErr) {
+    // Rollback balance on failure
+    if (accountMode === "live") {
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          live_balance: Number(profile.live_balance ?? 0),
+          available_cash: Number(profile.available_cash ?? 0),
+          account_balance: Number(profile.account_balance ?? 0),
+        } as never)
+        .eq("id", userId);
+    } else {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ demo_balance: Number(profile.demo_balance ?? 10000) } as never)
+        .eq("id", userId);
+    }
+    throw new Error(posErr.message);
+  }
+
+  // 6. Record transaction
+  const computedQty = quantity > 0 ? quantity : (margin * lev) / entryPrice;
+  await supabaseAdmin.from("transactions").insert({
+    user_id: userId,
+    type: "trade_open",
+    amount: margin,
+    quantity: Number(computedQty.toFixed(4)),
+    asset_name: `Open ${side.toUpperCase()} ${cleanAsset} (${accountMode})`,
+    status: "completed",
+    account_mode: accountMode,
+  } as never);
+
+  return { id: pos.id };
 }
 
-export async function closeUserPosition(userId: string, positionId: string, closePrice: number) {
+export async function closeUserPosition(
+  userId: string | undefined,
+  positionId: string,
+  closePrice: number,
+) {
+  // 1. Fetch position
   const { data: position, error: posErr } = await supabaseAdmin
     .from("live_positions")
-    .select("user_id")
+    .select("*")
     .eq("id", positionId)
     .maybeSingle();
+
   if (posErr) throw new Error(posErr.message);
-  if (!position || position.user_id !== userId) throw new Error("Position not found");
-  const { data, error } = await (supabaseAdmin as any).rpc("close_position_atomic", {
-    _position_id: positionId,
-    _close_price: closePrice,
-  });
-  if (error) throw new Error(error.message);
-  return { pnl: Number(data ?? 0) };
+  if (!position) throw new Error("Position not found");
+
+  const effectiveUserId = position.user_id;
+  if (userId && userId !== "admin" && userId !== effectiveUserId) {
+    throw new Error("Unauthorized: Position does not belong to user");
+  }
+
+  // If already closed, return existing pnl
+  if (position.status !== "open") {
+    return { pnl: Number(position.pnl ?? 0) };
+  }
+
+  // 2. Compute PnL
+  const entry = Number(position.entry_price || closePrice);
+  const lev = Number(position.leverage || 1);
+  const margin = Number(position.amount || 0);
+  const qty = entry > 0 ? (margin * lev) / entry : 0;
+
+  let pnl = 0;
+  if (position.side === "buy") {
+    pnl = Number(((closePrice - entry) * qty).toFixed(2));
+  } else {
+    pnl = Number(((entry - closePrice) * qty).toFixed(2));
+  }
+
+  const delta = margin + pnl;
+
+  // 3. Mark position as closed
+  const { error: closeErr } = await supabaseAdmin
+    .from("live_positions")
+    .update({
+      status: "closed",
+      current_price: closePrice,
+      closed_at: new Date().toISOString(),
+      pnl,
+    } as never)
+    .eq("id", positionId);
+
+  if (closeErr) throw new Error(closeErr.message);
+
+  // 4. Update user balance
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("live_balance, available_cash, account_balance, demo_balance")
+    .eq("id", effectiveUserId)
+    .maybeSingle();
+
+  if (profile) {
+    if (position.account_mode === "live") {
+      const newLive = Math.max(0, Number(profile.live_balance ?? 0) + delta);
+      const newAvail = Math.max(0, Number(profile.available_cash ?? 0) + delta);
+      const newAcct = Math.max(0, Number(profile.account_balance ?? 0) + delta);
+
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          live_balance: newLive,
+          available_cash: newAvail,
+          account_balance: newAcct,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", effectiveUserId);
+    } else {
+      const newDemo = Math.max(0, Number(profile.demo_balance ?? 10000) + delta);
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          demo_balance: newDemo,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", effectiveUserId);
+    }
+  }
+
+  // 5. Record transaction
+  const assetName = position.symbol || "CRYPTO";
+  await supabaseAdmin.from("transactions").insert({
+    user_id: effectiveUserId,
+    type: pnl >= 0 ? "trade_profit" : "trade_loss",
+    amount: Math.abs(pnl),
+    quantity: Number(qty.toFixed(4)),
+    asset_name: `Close ${position.side.toUpperCase()} ${assetName}`,
+    status: "completed",
+    account_mode: position.account_mode,
+  } as never);
+
+  return { pnl };
 }
 
 export function getAdminServerErrorMessage(error: unknown) {

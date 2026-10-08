@@ -225,7 +225,7 @@ function InstantSwapPage() {
         amount: inputNum * fromPrice,
         description: `Instant Swap: ${inputNum.toFixed(4)} ${fromSymbol} → ${netOutput.toFixed(4)} ${toSymbol}`,
         status: "approved",
-      });
+      } as any);
 
       soundFX.playDepositBonus();
       toast.success(

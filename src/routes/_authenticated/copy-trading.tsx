@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccountMode } from "@/lib/account-mode-context";
@@ -32,7 +32,7 @@ import {
   harvestCopyProfitServerFn,
   terminateCopyAllocationServerFn,
 } from "@/lib/bot.functions";
-import { calculateCopyProfitByTime } from "@/lib/profit-timing";
+import { calculateCopyProfitByTime, encodeCopyTierKey } from "@/lib/profit-timing";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import {

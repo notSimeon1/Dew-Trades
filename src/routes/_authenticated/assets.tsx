@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -29,8 +29,37 @@ import {
   SUPPORTED_CRYPTO_ASSETS,
 } from "@/lib/crypto-assets";
 
+function AssetsErrorFallback({ reset }: { reset: () => void }) {
+  return (
+    <Card className="p-8 text-center bg-zinc-950/80 border border-amber-500/30 rounded-2xl space-y-4 my-8 max-w-xl mx-auto shadow-2xl">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+        <WalletIcon className="h-7 w-7" />
+      </div>
+      <h2 className="text-xl font-bold text-white tracking-tight">Assets Ledger Synchronization</h2>
+      <p className="text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
+        Your individual cryptocurrency wallets and liquidity mesh valuations are syncing.
+      </p>
+      <div className="flex justify-center gap-3 pt-2">
+        <Button
+          onClick={() => {
+            try {
+              reset();
+            } catch {
+              window.location.reload();
+            }
+          }}
+          className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 active:scale-95"
+        >
+          <RefreshCw className="mr-2 h-4 w-4" /> Reconnect Asset Ledger
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/assets")({
   component: AssetsPage,
+  errorComponent: AssetsErrorFallback,
   head: () => ({
     meta: [
       { title: "My Assets — Dew Trades" },
@@ -46,11 +75,24 @@ export const Route = createFileRoute("/_authenticated/assets")({
   }),
 });
 
-function fmt(n: number, decimals: number) {
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: Math.min(2, decimals),
-    maximumFractionDigits: decimals,
-  });
+function fmt(n: number | null | undefined, decimals?: number) {
+  const safeN = typeof n === "number" && Number.isFinite(n) ? n : 0;
+  const d = Math.max(
+    0,
+    Math.min(
+      20,
+      Math.floor(typeof decimals === "number" && Number.isFinite(decimals) ? decimals : 2),
+    ),
+  );
+  const minD = Math.min(2, d);
+  try {
+    return safeN.toLocaleString("en-US", {
+      minimumFractionDigits: minD,
+      maximumFractionDigits: d,
+    });
+  } catch {
+    return safeN.toFixed(d);
+  }
 }
 
 function AssetsPage() {
@@ -62,6 +104,8 @@ function AssetsPage() {
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [convertSymbol, setConvertSymbol] = useState("ALL");
 
+  const currencyCode = currencyInfo?.code || "USD";
+
   const {
     data: wallets,
     isLoading,
@@ -70,11 +114,20 @@ function AssetsPage() {
     queryKey: ["my_crypto_wallets", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
-        .from("user_crypto_balances")
-        .select("*")
-        .eq("user_id", user.id);
-      return data ?? [];
+      try {
+        const { data, error } = await supabase
+          .from("user_crypto_balances")
+          .select("*")
+          .eq("user_id", user.id);
+        if (error) {
+          console.warn("[assets] user_crypto_balances query error:", error);
+          return [];
+        }
+        return data ?? [];
+      } catch (e) {
+        console.warn("[assets] user_crypto_balances catch:", e);
+        return [];
+      }
     },
     enabled: !!user,
     staleTime: 1500,
@@ -85,14 +138,23 @@ function AssetsPage() {
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select(
-          "live_balance, available_cash, account_balance, demo_balance, account_mode, crypto_balances",
-        )
-        .eq("id", user.id)
-        .maybeSingle();
-      return data;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select(
+            "live_balance, available_cash, account_balance, demo_balance, account_mode, crypto_balances",
+          )
+          .eq("id", user.id)
+          .maybeSingle();
+        if (error) {
+          console.warn("[assets] profile query error:", error);
+          return null;
+        }
+        return data;
+      } catch (e) {
+        console.warn("[assets] profile query catch:", e);
+        return null;
+      }
     },
     enabled: !!user,
     staleTime: 1500,
@@ -113,32 +175,60 @@ function AssetsPage() {
   }, [refetchWallets, refetchProfile]);
 
   const mode = (profile as any)?.account_mode as "demo" | "live" | undefined;
-  const fiatBalance =
-    mode === "demo"
-      ? Number((profile as any)?.demo_balance ?? 0)
-      : Number(
-          (profile as any)?.available_cash ??
-            (profile as any)?.live_balance ??
-            (profile as any)?.account_balance ??
-            0,
-        );
+
+  const fiatBalance = useMemo(() => {
+    if (mode === "demo") {
+      const db = Number((profile as any)?.demo_balance ?? 10000);
+      return Number.isFinite(db) ? db : 10000;
+    }
+    const val = Number(
+      (profile as any)?.available_cash ??
+        (profile as any)?.live_balance ??
+        (profile as any)?.account_balance ??
+        0,
+    );
+    return Number.isFinite(val) ? val : 0;
+  }, [mode, profile]);
 
   const { assets: enriched, totalCryptoUsd: totalCryptoValue } = useMemo(() => {
-    return computeEnrichedCryptoAssets(wallets, (profile as any)?.crypto_balances, tickers);
+    try {
+      return computeEnrichedCryptoAssets(wallets, (profile as any)?.crypto_balances, tickers);
+    } catch {
+      return {
+        assets: SUPPORTED_CRYPTO_ASSETS.map((m) => ({
+          ...m,
+          qty: 0,
+          price: 1,
+          usdValue: 0,
+        })),
+        totalCryptoUsd: 0,
+        assetMap: new Map(),
+      };
+    }
   }, [wallets, profile, tickers]);
 
-  const totalValue = fiatBalance + totalCryptoValue;
+  const safeTotalCryptoValue = Number.isFinite(totalCryptoValue) ? totalCryptoValue : 0;
+  const totalValue = Number.isFinite(fiatBalance + safeTotalCryptoValue)
+    ? fiatBalance + safeTotalCryptoValue
+    : 0;
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = enriched.filter((h) => !q || `${h.symbol} ${h.name}`.toLowerCase().includes(q));
+    const q = (search || "").trim().toLowerCase();
+    const list = (enriched || []).filter(
+      (h) => !q || `${h.symbol} ${h.name}`.toLowerCase().includes(q),
+    );
     return [...list].sort((a, b) =>
-      sort === "value" ? b.usdValue - a.usdValue : a.symbol.localeCompare(b.symbol),
+      sort === "value"
+        ? (b.usdValue || 0) - (a.usdValue || 0)
+        : (a.symbol || "").localeCompare(b.symbol || ""),
     );
   }, [enriched, search, sort]);
 
   const distribution = useMemo(
-    () => enriched.filter((h) => h.usdValue > 0).sort((a, b) => b.usdValue - a.usdValue),
+    () =>
+      (enriched || [])
+        .filter((h) => Number.isFinite(h.usdValue) && h.usdValue > 0)
+        .sort((a, b) => (b.usdValue || 0) - (a.usdValue || 0)),
     [enriched],
   );
 
@@ -189,7 +279,7 @@ function AssetsPage() {
               Crypto Holdings
             </div>
             <div className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
-              {formatCurrency(totalCryptoValue)}
+              {formatCurrency(safeTotalCryptoValue)}
             </div>
             <div className="mt-0.5 text-[11px] text-muted-foreground">Valued in real-time</div>
           </div>
@@ -205,7 +295,7 @@ function AssetsPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-extrabold text-white">
-                Convert Crypto Holdings to {currencyInfo.code} Live Balance
+                Convert Crypto Holdings to {currencyCode} Live Balance
               </span>
               <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
                 0% Fee Instant
@@ -226,8 +316,8 @@ function AssetsPage() {
           className="w-full sm:w-auto shrink-0 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all hover:scale-[1.02]"
         >
           <Sparkles className="mr-2 h-4 w-4" />
-          {totalCryptoValue > 0
-            ? `Convert All Crypto to USD ($${fmt(totalCryptoValue, 2)})`
+          {safeTotalCryptoValue > 0
+            ? `Convert All Crypto to USD ($${fmt(safeTotalCryptoValue, 2)})`
             : "Convert Crypto to Live Cash"}
         </Button>
       </Card>
@@ -239,20 +329,24 @@ function AssetsPage() {
           </h2>
           <div className="space-y-2">
             {distribution.map((h) => {
-              const pct = totalCryptoValue > 0 ? (h.usdValue / totalCryptoValue) * 100 : 0;
+              const pct =
+                safeTotalCryptoValue > 0 && Number.isFinite(h.usdValue)
+                  ? Math.min(100, Math.max(0, (h.usdValue / safeTotalCryptoValue) * 100))
+                  : 0;
+              const safePct = Number.isFinite(pct) ? pct : 0;
               return (
                 <div key={h.symbol}>
                   <div className="flex justify-between text-xs">
                     <span className="font-semibold">{h.symbol}</span>
                     <span className="tabular-nums text-muted-foreground">
-                      {pct.toFixed(1)}% · ${fmt(h.usdValue, 2)}
+                      {safePct.toFixed(1)}% · ${fmt(h.usdValue, 2)}
                     </span>
                   </div>
                   <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface">
                     <motion.div
                       className="h-full rounded-full bg-gradient-hero"
                       initial={{ width: 0 }}
-                      animate={{ width: `${pct}%` }}
+                      animate={{ width: `${safePct.toFixed(1)}%` }}
                       transition={{ duration: 0.6 }}
                     />
                   </div>
@@ -329,7 +423,7 @@ function AssetsPage() {
                     <span className="font-semibold tabular-nums">{formatPrice(h.price)}</span>
                   </div>
                   <div className="flex justify-between border-t border-border pt-1 text-sm">
-                    <span className="text-muted-foreground">{currencyInfo.code} value</span>
+                    <span className="text-muted-foreground">{currencyCode} value</span>
                     <span className="font-bold tabular-nums text-success">
                       {formatCurrency(h.usdValue)}
                     </span>

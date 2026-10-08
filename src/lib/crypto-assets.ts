@@ -110,16 +110,18 @@ export function computeEnrichedCryptoAssets(
       decimals: 4,
     };
 
-    const rowVal = rowMap.get(sym) ?? 0;
-    const jsonVal = normJson[sym] ?? 0;
-    const qty = Math.max(rowVal, jsonVal);
+    const rowVal = Number(rowMap.get(sym) ?? 0);
+    const jsonVal = Number(normJson[sym] ?? 0);
+    const safeRow = Number.isFinite(rowVal) ? Math.max(0, rowVal) : 0;
+    const safeJson = Number.isFinite(jsonVal) ? Math.max(0, jsonVal) : 0;
+    const qty = Math.max(safeRow, safeJson);
 
     let price = 1.0;
     if (sym === "USDT" || sym === "USDC") {
       price = 1.0;
     } else {
-      const tickerPrice = tickers[`${sym}USDT`]?.price ?? tickers[sym]?.price;
-      if (tickerPrice && tickerPrice > 0) {
+      const tickerPrice = Number(tickers[`${sym}USDT`]?.price ?? tickers[sym]?.price);
+      if (Number.isFinite(tickerPrice) && tickerPrice > 0) {
         price = tickerPrice;
       } else if (CRYPTO_FALLBACK_PRICES[sym]) {
         price = CRYPTO_FALLBACK_PRICES[sym];
@@ -128,11 +130,14 @@ export function computeEnrichedCryptoAssets(
       }
     }
 
-    const usdValue = Number((qty * price).toFixed(4));
+    const usdValue = Number.isFinite(qty * price) ? Number((qty * price).toFixed(4)) : 0;
     totalCryptoUsd += usdValue;
+
+    const safeDecimals = Math.max(0, Math.min(20, Math.floor(Number(meta.decimals) || 4)));
 
     const enriched: EnrichedAsset = {
       ...meta,
+      decimals: safeDecimals,
       qty,
       price,
       usdValue,
@@ -144,7 +149,7 @@ export function computeEnrichedCryptoAssets(
 
   return {
     assets,
-    totalCryptoUsd: Number(totalCryptoUsd.toFixed(2)),
+    totalCryptoUsd: Number.isFinite(totalCryptoUsd) ? Number(totalCryptoUsd.toFixed(2)) : 0,
     assetMap,
   };
 }

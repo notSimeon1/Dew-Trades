@@ -230,8 +230,9 @@ function BuyBitcoinPage() {
             rawList = publicData.paymentMethods as PaymentMethod[];
           }
           if (publicData.bankMethods && publicData.bankMethods.length > 0) {
-            const b = publicData.bankMethods[0];
-            const bankSummary = `Routing: ${b.routing_number} · Account: ${b.account_number} (${b.bank_name})`;
+            const b: any = publicData.bankMethods[0];
+            const bankTitle = b.bank_name || b.method_name || "Bank Wire";
+            const bankSummary = `Routing: ${b.routing_number || ""} · Account: ${b.account_number || ""} (${bankTitle})`;
             settingsMap.set("payment_method_bankwire", bankSummary);
           }
         }
@@ -266,7 +267,7 @@ function BuyBitcoinPage() {
         ) {
           updatedIdentifier = settingsMap.get("payment_method_cashapp")!;
           const clean = updatedIdentifier.trim().replace(/^\$+/, "");
-          updatedCashAppLink = clean ? `https://cash.app/$${clean}` : null;
+          updatedCashAppLink = clean ? `https://cash.app/$${clean}` : undefined;
         } else if (m.method_key === "paypal" && settingsMap.has("payment_method_paypal")) {
           updatedIdentifier = settingsMap.get("payment_method_paypal")!;
         } else if (m.method_key === "zelle" && settingsMap.has("payment_method_zelle")) {

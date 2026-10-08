@@ -35,7 +35,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: any; reset: () => void }) {
   console.error("[DewTrades Root Error]:", error);
   const router = useRouter();
   const [showDetails, setShowDetails] = useState(false);

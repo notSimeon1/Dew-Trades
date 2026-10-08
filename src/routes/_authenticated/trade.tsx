@@ -562,7 +562,7 @@ function Dashboard() {
         if (now - aiStateRef.current.lastTradeAt < 8_000) return; // cooldown
         if (now - aiStateRef.current.lastLossAt < 20_000) return; // post-loss pause
 
-        const usable = accountMode === "live" ? liveBalance : demoBalance;
+        const usable = usableBalance;
         if (usable < 10) return;
 
         let side: "buy" | "sell" | null = null;

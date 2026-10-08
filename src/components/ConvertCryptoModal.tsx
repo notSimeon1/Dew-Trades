@@ -36,6 +36,16 @@ interface ConvertCryptoModalProps {
   defaultSymbol?: string;
 }
 
+function formatQty(qty: number, decimals: number = 4) {
+  const safeQ = Number.isFinite(qty) ? qty : 0;
+  const safeD = Math.max(0, Math.min(20, Math.floor(Number.isFinite(decimals) ? decimals : 4)));
+  try {
+    return safeQ.toLocaleString("en-US", { maximumFractionDigits: safeD });
+  } catch {
+    return safeQ.toFixed(safeD);
+  }
+}
+
 export function ConvertCryptoModal({
   open,
   onOpenChange,
@@ -192,8 +202,8 @@ export function ConvertCryptoModal({
       // 4. Record transaction log in transactions table
       const desc =
         conversionItems.length === 1
-          ? `Converted ${conversionItems[0].qty.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${conversionItems[0].symbol} to ${formatCurrency(totalUsdToCredit)} Cash Balance`
-          : `Converted crypto holdings (${conversionItems.map((c) => `${c.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${c.symbol}`).join(", ")}) to ${formatCurrency(totalUsdToCredit)} Cash Balance`;
+          ? `Converted ${formatQty(conversionItems[0].qty, 6)} ${conversionItems[0].symbol} to ${formatCurrency(totalUsdToCredit)} Cash Balance`
+          : `Converted crypto holdings (${conversionItems.map((c) => `${formatQty(c.qty, 4)} ${c.symbol}`).join(", ")}) to ${formatCurrency(totalUsdToCredit)} Cash Balance`;
 
       await supabase.from("transactions").insert({
         user_id: user.id,
@@ -259,8 +269,7 @@ export function ConvertCryptoModal({
                         {h.icon} {h.symbol}
                       </span>
                       <span className="text-xs text-slate-400">
-                        ({h.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} ={" "}
-                        {formatCurrency(h.usdValue)})
+                        ({formatQty(h.qty, 4)} = {formatCurrency(h.usdValue)})
                       </span>
                     </div>
                   </SelectItem>
@@ -286,8 +295,7 @@ export function ConvertCryptoModal({
                   <div className="flex items-center gap-2">
                     <CryptoIcon symbol={item.symbol} size="xs" />
                     <span className="font-semibold text-slate-200">
-                      {item.qty.toLocaleString(undefined, { maximumFractionDigits: item.decimals })}{" "}
-                      {item.symbol}
+                      {formatQty(item.qty, item.decimals)} {item.symbol}
                     </span>
                   </div>
                   <span className="font-bold text-amber-400 tabular-nums">

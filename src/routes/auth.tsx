@@ -34,19 +34,23 @@ import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  validateSearch: (s: Record<string, unknown>) => ({
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): {
+    next: string;
+    tab?: "signup" | "signin";
+    mode?: "signup" | "signin";
+  } => ({
     next:
       typeof s.next === "string" && s.next.startsWith("/") && !s.next.startsWith("//")
         ? s.next
         : "",
-    tab:
-      typeof s.tab === "string" && (s.tab === "signup" || s.tab === "signin")
-        ? (s.tab as "signup" | "signin")
-        : undefined,
-    mode:
-      typeof s.mode === "string" && (s.mode === "signup" || s.mode === "signin")
-        ? (s.mode as "signup" | "signin")
-        : undefined,
+    ...(typeof s.tab === "string" && (s.tab === "signup" || s.tab === "signin")
+      ? { tab: s.tab as "signup" | "signin" }
+      : {}),
+    ...(typeof s.mode === "string" && (s.mode === "signup" || s.mode === "signin")
+      ? { mode: s.mode as "signup" | "signin" }
+      : {}),
   }),
   head: () => ({
     meta: [

@@ -122,12 +122,13 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     supabase
       .from("profiles")
-      .select("base_currency")
+      .select("base_currency" as any)
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.base_currency) {
-          const code = data.base_currency as CurrencyCode;
+        const rawCode = (data as any)?.base_currency;
+        if (rawCode) {
+          const code = rawCode as CurrencyCode;
           if (AVAILABLE_CURRENCIES.some((c) => c.code === code)) {
             setCurrencyState(code);
             if (typeof window !== "undefined") {
@@ -159,7 +160,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
           });
           setRates(next);
         }
-      } catch (e) {
+      } catch {
         // Fallback to defaults on error
       }
     }
@@ -183,7 +184,10 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         }
       }
       if (user) {
-        await supabase.from("profiles").update({ base_currency: code }).eq("id", user.id);
+        await supabase
+          .from("profiles")
+          .update({ base_currency: code } as any)
+          .eq("id", user.id);
       }
     },
     [user],
@@ -216,23 +220,33 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       const target = options?.targetCurrency || currency;
       const info = AVAILABLE_CURRENCIES.find((c) => c.code === target) || AVAILABLE_CURRENCIES[0];
       const rate = rates[target] ?? DEFAULT_RATES[target] ?? 1.0;
-      const converted = (usdAmount || 0) * rate;
+      const safeAmount = Number.isFinite(usdAmount) ? Number(usdAmount) : 0;
+      const converted = safeAmount * rate;
 
       const dec = options?.decimals !== undefined ? options.decimals : info.decimals;
+      const safeDec = Math.max(0, Math.min(20, Math.floor(Number(dec) || 0)));
       const showSymbol = options?.showSymbol !== false;
 
       let formattedNumber = "";
 
       if (options?.compact && Math.abs(converted) >= 1000) {
-        formattedNumber = new Intl.NumberFormat("en-US", {
-          notation: "compact",
-          maximumFractionDigits: 1,
-        }).format(converted);
+        try {
+          formattedNumber = new Intl.NumberFormat("en-US", {
+            notation: "compact",
+            maximumFractionDigits: 1,
+          }).format(converted);
+        } catch {
+          formattedNumber = converted.toFixed(1);
+        }
       } else {
-        formattedNumber = converted.toLocaleString("en-US", {
-          minimumFractionDigits: dec,
-          maximumFractionDigits: dec,
-        });
+        try {
+          formattedNumber = converted.toLocaleString("en-US", {
+            minimumFractionDigits: safeDec,
+            maximumFractionDigits: safeDec,
+          });
+        } catch {
+          formattedNumber = converted.toFixed(safeDec);
+        }
       }
 
       if (!showSymbol) return formattedNumber;
@@ -253,18 +267,25 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       const target = options?.targetCurrency || currency;
       const info = AVAILABLE_CURRENCIES.find((c) => c.code === target) || AVAILABLE_CURRENCIES[0];
       const rate = rates[target] ?? DEFAULT_RATES[target] ?? 1.0;
-      const converted = (usdPrice || 0) * rate;
+      const safePrice = Number.isFinite(usdPrice) ? Number(usdPrice) : 0;
+      const converted = safePrice * rate;
 
       let defaultDec = info.decimals;
       if (converted < 0.01 && converted > 0) defaultDec = 6;
       else if (converted < 1 && converted > 0) defaultDec = 4;
 
       const dec = options?.decimals !== undefined ? options.decimals : defaultDec;
+      const safeDec = Math.max(0, Math.min(20, Math.floor(Number(dec) || 0)));
 
-      const formattedNumber = converted.toLocaleString("en-US", {
-        minimumFractionDigits: dec,
-        maximumFractionDigits: dec,
-      });
+      let formattedNumber = "";
+      try {
+        formattedNumber = converted.toLocaleString("en-US", {
+          minimumFractionDigits: safeDec,
+          maximumFractionDigits: safeDec,
+        });
+      } catch {
+        formattedNumber = converted.toFixed(safeDec);
+      }
 
       if (info.code === "AED") return `${formattedNumber} AED`;
       if (info.code === "CHF") return `CHF ${formattedNumber}`;
