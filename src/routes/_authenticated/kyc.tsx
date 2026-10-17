@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -51,6 +51,22 @@ function KycPage() {
     },
     enabled: !!user,
   });
+
+  useEffect(() => {
+    if (profile?.full_name && !fullName) {
+      setFullName(profile.full_name);
+    }
+    const rawCountry =
+      (profile as any)?.country || (user?.user_metadata as any)?.country || "";
+    if (rawCountry && !country) {
+      const isNigeria = /nigeria|\bng\b|\bnga\b/i.test(String(rawCountry));
+      if (isNigeria) {
+        setCountry("USA");
+      } else {
+        setCountry(String(rawCountry));
+      }
+    }
+  }, [profile, user, fullName, country]);
 
   const { data: submissions, refetch } = useQuery({
     queryKey: ["my_kyc", user?.id],
@@ -152,7 +168,7 @@ function KycPage() {
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 maxLength={60}
-                placeholder="Nigeria"
+                placeholder="USA"
               />
             </div>
             <div className="space-y-2">

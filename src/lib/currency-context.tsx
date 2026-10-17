@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 
 export type CurrencyCode =
-  "USD" | "EUR" | "GBP" | "JPY" | "CAD" | "AUD" | "CHF" | "BRL" | "INR" | "NGN" | "AED";
+  "USD" | "EUR" | "GBP" | "JPY" | "CAD" | "AUD" | "CHF" | "BRL" | "INR" | "SGD" | "AED";
 
 export interface CurrencyConfig {
   code: CurrencyCode;
@@ -47,11 +47,11 @@ export const AVAILABLE_CURRENCIES: CurrencyConfig[] = [
   { code: "BRL", symbol: "R$", name: "Brazilian Real", flag: "🇧🇷", defaultRate: 5.6, decimals: 2 },
   { code: "INR", symbol: "₹", name: "Indian Rupee", flag: "🇮🇳", defaultRate: 84.0, decimals: 2 },
   {
-    code: "NGN",
-    symbol: "₦",
-    name: "Nigerian Naira",
-    flag: "🇳🇬",
-    defaultRate: 1600.0,
+    code: "SGD",
+    symbol: "S$",
+    name: "Singapore Dollar",
+    flag: "🇸🇬",
+    defaultRate: 1.35,
     decimals: 2,
   },
   { code: "AED", symbol: "AED", name: "UAE Dirham", flag: "🇦🇪", defaultRate: 3.67, decimals: 2 },

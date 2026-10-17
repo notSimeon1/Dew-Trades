@@ -19,6 +19,8 @@ export const registerDirectUser = createServerFn({ method: "POST" })
     const { email, password, fullName, country, referralCode } = data;
     const cleanEmail = email.trim().toLowerCase();
 
+    const cleanCountry = country && !/nigeria|\bng\b|\bnga\b/i.test(country) ? country : "USA";
+
     try {
       let createdUserId: string | null = null;
 
@@ -29,13 +31,16 @@ export const registerDirectUser = createServerFn({ method: "POST" })
         if (existing) {
           createdUserId = existing.id;
           // If already registered, ensure email is confirmed and update password
+          const prevCountry = existing.user_metadata?.country;
+          const safePrevCountry =
+            prevCountry && !/nigeria|\bng\b|\bnga\b/i.test(prevCountry) ? prevCountry : "USA";
           await supabaseAdmin.auth.admin.updateUserById(existing.id, {
             email_confirm: true,
             password,
             user_metadata: {
               ...(existing.user_metadata || {}),
               full_name: fullName || existing.user_metadata?.full_name,
-              country: country || existing.user_metadata?.country,
+              country: cleanCountry || safePrevCountry,
               referral_code: referralCode || existing.user_metadata?.referral_code,
             },
           });
@@ -50,7 +55,7 @@ export const registerDirectUser = createServerFn({ method: "POST" })
           email_confirm: true,
           user_metadata: {
             full_name: fullName || "Trader",
-            country: country || "United States",
+            country: cleanCountry,
             referral_code: referralCode || null,
           },
         });

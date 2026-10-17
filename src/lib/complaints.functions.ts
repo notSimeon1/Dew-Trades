@@ -11,7 +11,7 @@ const schema = z.object({
 const ADMIN_EMAIL = "applefox998@gmail.com";
 
 export const notifyComplaint = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => schema.parse(input))
+  .validator((input: unknown) => schema.parse(input))
   .handler(async ({ data }) => {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {

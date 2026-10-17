@@ -166,9 +166,9 @@ const FAKE_COMPETITORS: Omit<LeaderboardUser, "rank">[] = [
   },
   {
     id: "comp-13",
-    name: "Aisha Okafor",
-    email: "aisha@lagos.ng",
-    country: "Nigeria",
+    name: "Avery Parker",
+    email: "avery@chicago.us",
+    country: "United States",
     totalDeposit: 3300,
     winRate: 75.2,
     tradesCount: 31,

@@ -91,83 +91,83 @@ export const getAdminOverview = createServerFn({ method: "GET" }).handler(async 
 );
 
 export const decideAdminDeposit = createServerFn({ method: "POST" })
-  .inputValidator((input) => decisionSchema.parse(input))
+  .validator((input) => decisionSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminDecideDeposit(context?.userId || "admin", data.id, data.status),
   );
 
 export const decideAdminWithdrawal = createServerFn({ method: "POST" })
-  .inputValidator((input) => decisionSchema.parse(input))
+  .validator((input) => decisionSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminDecideWithdrawal(context?.userId || "admin", data.id, data.status),
   );
 
 export const updateAdminChart = createServerFn({ method: "POST" })
-  .inputValidator((input) => chartSchema.parse(input))
+  .validator((input) => chartSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminUpdateChart(context?.userId || "admin", data.userId, data.mode, data.intensity),
   );
 
 export const adjustAdminBalance = createServerFn({ method: "POST" })
-  .inputValidator((input) => balanceSchema.parse(input))
+  .validator((input) => balanceSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminAdjustBalance(context?.userId || "admin", data.userId, data.amount, data.direction),
   );
 
 export const updateAdminComplaint = createServerFn({ method: "POST" })
-  .inputValidator((input) => complaintSchema.parse(input))
+  .validator((input) => complaintSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminUpdateComplaint(context?.userId || "admin", data.id, data.status),
   );
 
 export const updateAdminSetting = createServerFn({ method: "POST" })
-  .inputValidator((input) => settingSchema.parse(input))
+  .validator((input) => settingSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminUpdateSetting(context?.userId || "admin", data.key, data.value),
   );
 
 export const deleteAdminSetting = createServerFn({ method: "POST" })
-  .inputValidator((input) => deleteSettingSchema.parse(input))
+  .validator((input) => deleteSettingSchema.parse(input))
   .handler(async ({ data, context }) => adminDeleteSetting(context?.userId || "admin", data.key));
 
 export const toggleAdminAccountMode = createServerFn({ method: "POST" })
-  .inputValidator((input) => modeSchema.parse(input))
+  .validator((input) => modeSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminToggleAccountMode(context?.userId || "admin", data.userId, data.mode),
   );
 
 export const toggleAdminSuspend = createServerFn({ method: "POST" })
-  .inputValidator((input) => suspendSchema.parse(input))
+  .validator((input) => suspendSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminToggleSuspend(context?.userId || "admin", data.userId, data.suspended),
   );
 
 export const toggleAdminAiTrading = createServerFn({ method: "POST" })
-  .inputValidator((input) => aiTradingSchema.parse(input))
+  .validator((input) => aiTradingSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminToggleAiTrading(context?.userId || "admin", data.userId, data.enabled),
   );
 
 export const decideAdminKyc = createServerFn({ method: "POST" })
-  .inputValidator((input) => kycSchema.parse(input))
+  .validator((input) => kycSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminDecideKyc(context?.userId || "admin", data.id, data.status, data.note),
   );
 
 export const postAdminNews = createServerFn({ method: "POST" })
-  .inputValidator((input) => newsSchema.parse(input))
+  .validator((input) => newsSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminPostNews(context?.userId || "admin", data.title, data.body, data.impact, data.source),
   );
 
 export const getAdminKycUrl = createServerFn({ method: "POST" })
-  .inputValidator((input) => docSchema.parse(input))
+  .validator((input) => docSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminGetKycDocumentUrl(context?.userId || "admin", data.path),
   );
 
 export const openPosition = createServerFn({ method: "POST" })
-  .inputValidator((input) => openPositionSchema.parse(input))
+  .validator((input) => openPositionSchema.parse(input))
   .handler(async ({ data, context }) =>
     openUserPosition(
       context?.userId || "admin",
@@ -182,7 +182,7 @@ export const openPosition = createServerFn({ method: "POST" })
   );
 
 export const closePosition = createServerFn({ method: "POST" })
-  .inputValidator((input) => closePositionSchema.parse(input))
+  .validator((input) => closePositionSchema.parse(input))
   .handler(async ({ data, context }) =>
     closeUserPosition(context?.userId || "admin", data.id, data.closePrice),
   );
@@ -192,7 +192,7 @@ export const getPlatformSettings = createServerFn({ method: "GET" }).handler(asy
 );
 
 export const savePlatformSetting = createServerFn({ method: "POST" })
-  .inputValidator((input) => platformSettingSchema.parse(input))
+  .validator((input) => platformSettingSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminSavePlatformSetting(context?.userId || "admin", data.keyName, data.value, data.category),
   );
@@ -211,7 +211,7 @@ const approveCryptoDepositSchema = z.object({
 });
 
 export const adjustAdminCryptoBalance = createServerFn({ method: "POST" })
-  .inputValidator((input) => cryptoBalanceSchema.parse(input))
+  .validator((input) => cryptoBalanceSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminAdjustCryptoBalance(
       context?.userId || "admin",
@@ -223,7 +223,7 @@ export const adjustAdminCryptoBalance = createServerFn({ method: "POST" })
   );
 
 export const approveAdminDepositCrypto = createServerFn({ method: "POST" })
-  .inputValidator((input) => approveCryptoDepositSchema.parse(input))
+  .validator((input) => approveCryptoDepositSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminApproveDepositCrypto(
       context?.userId || "admin",
@@ -234,7 +234,7 @@ export const approveAdminDepositCrypto = createServerFn({ method: "POST" })
   );
 
 export const reconcileAdminLedger = createServerFn({ method: "POST" })
-  .inputValidator((input?: { userId?: string }) => input)
+  .validator((input?: { userId?: string }) => input)
   .handler(async ({ data, context }) =>
     adminReconcileLedger(context?.userId || "admin", data?.userId),
   );
@@ -253,7 +253,7 @@ const markReadSchema = z.object({
 });
 
 export const markSupportMessagesRead = createServerFn({ method: "POST" })
-  .inputValidator((input) => markReadSchema.parse(input))
+  .validator((input) => markReadSchema.parse(input))
   .handler(async ({ data }) => markSupportThreadRead(data.threadId, data.role));
 
 export const getPublicPaymentDetails = createServerFn({ method: "GET" }).handler(async () =>
@@ -277,5 +277,5 @@ const updateBankSchema = z.object({
 });
 
 export const updateAdminBankMethod = createServerFn({ method: "POST" })
-  .inputValidator((input) => updateBankSchema.parse(input))
+  .validator((input) => updateBankSchema.parse(input))
   .handler(async ({ data, context }) => adminUpdateBankMethod(context?.userId || "admin", data));

@@ -81,7 +81,7 @@ export function AuthPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
-  const [country, setCountry] = useState("United States");
+  const [country, setCountry] = useState("USA");
   const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -451,7 +451,7 @@ export function AuthPage() {
                           type="text"
                           value={country}
                           onChange={(e) => setCountry(e.target.value)}
-                          placeholder="United States"
+                          placeholder="USA"
                           required={tab === "signup"}
                           maxLength={80}
                           className="mt-1.5 rounded-xl border border-white/10 bg-[#06080e]/80 py-2 px-3 text-xs text-white placeholder-zinc-500 focus:border-amber-400/60 focus:ring-1 focus:ring-amber-500/20 transition-all"
