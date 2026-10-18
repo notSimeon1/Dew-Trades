@@ -5,9 +5,7 @@
   "auth": {
     "type": "oauth",
     "issuer": "https://wbdfjruovvolsmzpihqc.supabase.co/auth/v1",
-    "accepted_audiences": [
-      "authenticated"
-    ]
+    "accepted_audiences": ["authenticated"]
   },
   "mcp": {
     "server": {
@@ -70,11 +68,7 @@
           "properties": {
             "status": {
               "type": "string",
-              "enum": [
-                "open",
-                "closed",
-                "all"
-              ],
+              "enum": ["open", "closed", "all"],
               "description": "Filter by status (default: open)."
             },
             "limit": {

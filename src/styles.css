@@ -37,8 +37,19 @@
   --color-champagne: var(--champagne);
   --color-midnight: var(--midnight);
   --color-navy-gray: var(--navy-gray);
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  display: block;
 }
 
 :root {
@@ -46,56 +57,57 @@
   --radius: 0.375rem;
 
   /* Dew Trades Official Corporate Palette: Obsidian Black & Executive Gold/Amber */
-  --background: #090A0E;
-  --foreground: #F8FAFC;
+  --background: #090a0e;
+  --foreground: #f8fafc;
 
   /* Surfaces */
   --surface: #101217;
-  --surface-elevated: #171A22;
+  --surface-elevated: #171a22;
   --card: #101217;
-  --card-foreground: #F8FAFC;
-  --popover: #13161D;
-  --popover-foreground: #F8FAFC;
+  --card-foreground: #f8fafc;
+  --popover: #13161d;
+  --popover-foreground: #f8fafc;
 
   /* Primary CTA: Institutional Executive Gold */
-  --primary: #EAB308;
-  --primary-foreground: #090A0E;
+  --primary: #eab308;
+  --primary-foreground: #090a0e;
   --primary-glow: rgba(234, 179, 8, 0.28);
 
   /* Secondary: Deep Charcoal Slate */
-  --secondary: #171A22;
-  --secondary-foreground: #E2E8F0;
+  --secondary: #171a22;
+  --secondary-foreground: #e2e8f0;
 
-  --muted: #13161D;
-  --muted-foreground: #94A3B8;
+  --muted: #13161d;
+  --muted-foreground: #94a3b8;
 
   /* Accent: Executive Warm Amber Gold */
-  --accent: #F59E0B;
-  --accent-foreground: #090A0E;
+  --accent: #f59e0b;
+  --accent-foreground: #090a0e;
 
   /* Financial Status & Alerts (Corporate Neutrals & Warm Bronze - No red/green) */
-  --destructive: #71717A;
-  --destructive-foreground: #FFFFFF;
+  --destructive: #71717a;
+  --destructive-foreground: #ffffff;
 
-  --success: #EAB308;
-  --success-foreground: #090A0E;
+  --success: #eab308;
+  --success-foreground: #090a0e;
 
   /* Precision Graphite Borders & Rings */
   --border: #222631;
-  --input: #13161D;
-  --ring: #EAB308;
+  --input: #13161d;
+  --ring: #eab308;
 
   /* Specialized Branding Tokens */
-  --sapphire: #EAB308;
-  --champagne: #F59E0B;
-  --midnight: #090A0E;
+  --sapphire: #eab308;
+  --champagne: #f59e0b;
+  --midnight: #090a0e;
   --navy-gray: #101217;
 
   /* Institutional Gradients & Meshes */
-  --gradient-hero: linear-gradient(135deg, #090A0E 0%, #171A22 65%, #EAB308 100%);
-  --gradient-card: linear-gradient(180deg, #101217 0%, #090A0E 100%);
-  --gradient-mesh: radial-gradient(at 15% 0%, rgba(234, 179, 8, 0.09) 0px, transparent 55%),
-                   radial-gradient(at 85% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 55%);
+  --gradient-hero: linear-gradient(135deg, #090a0e 0%, #171a22 65%, #eab308 100%);
+  --gradient-card: linear-gradient(180deg, #101217 0%, #090a0e 100%);
+  --gradient-mesh:
+    radial-gradient(at 15% 0%, rgba(234, 179, 8, 0.09) 0px, transparent 55%),
+    radial-gradient(at 85% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 55%);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.7);
@@ -103,49 +115,51 @@
   --shadow-glow: 0 0 35px rgba(234, 179, 8, 0.22);
 }
 
-.dark, :root {
-  --background: #090A0E;
-  --foreground: #F8FAFC;
+.dark,
+:root {
+  --background: #090a0e;
+  --foreground: #f8fafc;
   --surface: #101217;
-  --surface-elevated: #171A22;
+  --surface-elevated: #171a22;
   --card: #101217;
-  --card-foreground: #F8FAFC;
-  --popover: #13161D;
-  --popover-foreground: #F8FAFC;
+  --card-foreground: #f8fafc;
+  --popover: #13161d;
+  --popover-foreground: #f8fafc;
 
-  --primary: #EAB308;
-  --primary-foreground: #090A0E;
+  --primary: #eab308;
+  --primary-foreground: #090a0e;
   --primary-glow: rgba(234, 179, 8, 0.28);
 
-  --secondary: #171A22;
-  --secondary-foreground: #E2E8F0;
-  --muted: #13161D;
-  --muted-foreground: #94A3B8;
-  --accent: #F59E0B;
-  --accent-foreground: #090A0E;
+  --secondary: #171a22;
+  --secondary-foreground: #e2e8f0;
+  --muted: #13161d;
+  --muted-foreground: #94a3b8;
+  --accent: #f59e0b;
+  --accent-foreground: #090a0e;
 
-  --destructive: #71717A;
-  --destructive-foreground: #FFFFFF;
-  --success: #EAB308;
-  --success-foreground: #090A0E;
+  --destructive: #71717a;
+  --destructive-foreground: #ffffff;
+  --success: #eab308;
+  --success-foreground: #090a0e;
 
   --border: #222631;
-  --input: #13161D;
-  --ring: #EAB308;
+  --input: #13161d;
+  --ring: #eab308;
 
-  --sapphire: #EAB308;
-  --champagne: #F59E0B;
-  --midnight: #090A0E;
+  --sapphire: #eab308;
+  --champagne: #f59e0b;
+  --midnight: #090a0e;
   --navy-gray: #101217;
 
-  --gradient-hero: linear-gradient(135deg, #090A0E 0%, #171A22 65%, #EAB308 100%);
-  --gradient-card: linear-gradient(180deg, #101217 0%, #090A0E 100%);
-  --gradient-mesh: radial-gradient(at 15% 0%, rgba(234, 179, 8, 0.09) 0px, transparent 55%),
-                   radial-gradient(at 85% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 55%);
+  --gradient-hero: linear-gradient(135deg, #090a0e 0%, #171a22 65%, #eab308 100%);
+  --gradient-card: linear-gradient(180deg, #101217 0%, #090a0e 100%);
+  --gradient-mesh:
+    radial-gradient(at 15% 0%, rgba(234, 179, 8, 0.09) 0px, transparent 55%),
+    radial-gradient(at 85% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 55%);
   --shadow-glow: 0 0 35px rgba(234, 179, 8, 0.22);
-  --gold: #C5A880;
-  --silver: #F1F5F9;
-  --navy: #080C0F;
+  --gold: #c5a880;
+  --silver: #f1f5f9;
+  --navy: #080c0f;
 }
 
 @layer base {
@@ -169,20 +183,43 @@
     text-rendering: optimizeLegibility;
     overscroll-behavior-y: none;
   }
-  button, a, input, select {
+  button,
+  a,
+  input,
+  select {
     touch-action: manipulation;
   }
-  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.025em; font-weight: 700; }
-  code, kbd, samp, pre { font-family: var(--font-mono); }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+    font-weight: 700;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
 }
 
 @layer utilities {
-  .bg-gradient-hero { background: var(--gradient-hero); }
-  .bg-gradient-card { background: var(--gradient-card); }
-  .shadow-elegant { box-shadow: var(--shadow-lg); }
-  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .bg-gradient-hero {
+    background: var(--gradient-hero);
+  }
+  .bg-gradient-card {
+    background: var(--gradient-card);
+  }
+  .shadow-elegant {
+    box-shadow: var(--shadow-lg);
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
   .text-gradient {
-    background: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 50%, #EAB308 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #eab308 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -194,14 +231,19 @@
     backdrop-filter: blur(24px) saturate(180%);
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 10px 40px -10px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
   }
   .liquid-glass-elevated {
     background: rgba(23, 26, 34, 0.75);
     backdrop-filter: blur(32px) saturate(200%);
     -webkit-backdrop-filter: blur(32px) saturate(200%);
     border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.85), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25), 0 0 20px rgba(234, 179, 8, 0.12);
+    box-shadow:
+      0 20px 60px -15px rgba(0, 0, 0, 0.85),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.25),
+      0 0 20px rgba(234, 179, 8, 0.12);
   }
   .liquid-glass-pill {
     background: rgba(255, 255, 255, 0.05);
@@ -211,33 +253,61 @@
     box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
   }
 
-  .bg-morph { position: relative; overflow: hidden; isolation: isolate; }
-  .bg-morph::before, .bg-morph::after {
-    content: ""; position: absolute; z-index: -1;
-    width: 45vmax; height: 45vmax; border-radius: 50%;
-    filter: blur(80px); opacity: 0.22;
+  .bg-morph {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .bg-morph::before,
+  .bg-morph::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 45vmax;
+    height: 45vmax;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.22;
     will-change: transform;
     transform: translateZ(0);
   }
   .bg-morph::before {
-    top: -20%; left: -10%;
+    top: -20%;
+    left: -10%;
     background: radial-gradient(circle at 30% 30%, rgba(234, 179, 8, 0.2), transparent 60%);
   }
   .bg-morph::after {
-    bottom: -25%; right: -15%;
+    bottom: -25%;
+    right: -15%;
     background: radial-gradient(circle at 70% 70%, rgba(245, 158, 11, 0.15), transparent 60%);
   }
 
   .shimmer-text {
-    background: linear-gradient(90deg, #FFFFFF 0%, #EAB308 50%, #FFFFFF 100%);
+    background: linear-gradient(90deg, #ffffff 0%, #eab308 50%, #ffffff 100%);
     background-size: 200% auto;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
     animation: shimmer 6s linear infinite;
   }
-  @keyframes shimmer { to { background-position: 200% center; } }
+  @keyframes shimmer {
+    to {
+      background-position: 200% center;
+    }
+  }
 
-  .float-slow { animation: float-slow 7s ease-in-out infinite; }
-  @keyframes float-slow { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }
+  .float-slow {
+    animation: float-slow 7s ease-in-out infinite;
+  }
+  @keyframes float-slow {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
 }
 
 /* Institutional custom scrollbars */
@@ -246,12 +316,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #080C0F;
+  background: #080c0f;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1E2E3A;
+  background: #1e2e3a;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2D4354;
+  background: #2d4354;
 }

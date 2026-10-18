@@ -56,8 +56,7 @@ function KycPage() {
     if (profile?.full_name && !fullName) {
       setFullName(profile.full_name);
     }
-    const rawCountry =
-      (profile as any)?.country || (user?.user_metadata as any)?.country || "";
+    const rawCountry = (profile as any)?.country || (user?.user_metadata as any)?.country || "";
     if (rawCountry && !country) {
       const isNigeria = /nigeria|\bng\b|\bnga\b/i.test(String(rawCountry));
       if (isNigeria) {
