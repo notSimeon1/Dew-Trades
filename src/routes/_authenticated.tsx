@@ -26,23 +26,41 @@ function AuthenticatedLayout() {
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("is_suspended")
-        .eq("id", user.id)
-        .maybeSingle();
-      return data;
+      const [
+        { data: profile },
+        { data: roles }
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("is_suspended, role")
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+      ]);
+      return { 
+        ...profile, 
+        is_admin: profile?.role === "admin" || profile?.role === "super_admin" || (roles ?? []).some(r => r.role === "admin" || r.role === "super_admin")
+      };
     },
     enabled: !!user,
     staleTime: 15000,
   });
+
+  const isAdmin = profile?.is_admin;
+
 
   const isSuspended = Boolean(profile?.is_suspended);
   const isDashboard = location.pathname === "/dashboard" || location.pathname === "/dashboard/";
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth", search: { next: "" } });
-  }, [user, loading, navigate]);
+    if (!loading && user && profile && location.pathname.startsWith("/admin") && !isAdmin) {
+      navigate({ to: "/dashboard" });
+    }
+  }, [user, loading, navigate, profile, location.pathname, isAdmin]);
 
   if (loading || !user) {
     return (
@@ -50,6 +68,10 @@ function AuthenticatedLayout() {
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
+  }
+
+  if (location.pathname.startsWith("/admin") && !isAdmin) {
+    return null; // Should have redirected, but fail safe
   }
 
   return (

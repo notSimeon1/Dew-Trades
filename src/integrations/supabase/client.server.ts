@@ -11,12 +11,6 @@ function createSupabaseAdminClient() {
     process.env.VITE_SUPABASE_URL ||
     "https://wbdfjruovvolsmzpihqc.supabase.co";
   const SUPABASE_SERVICE_ROLE_KEY =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.VITE_SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZGZqcnVvdnZvbHNtenBpaHFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc4ODIxOCwiZXhwIjoyMTA0MzY0MjE4fQ.Z8GUd0OkLSdWpilr2vbdlOeVDNDgfPe0wKBrtm4rujY";
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
