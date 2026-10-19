@@ -60,7 +60,7 @@ function KycPage() {
     if (rawCountry && !country) {
       const isNigeria = /nigeria|\bng\b|\bnga\b/i.test(String(rawCountry));
       if (isNigeria) {
-        setCountry("USA");
+        setCountry("Australia");
       } else {
         setCountry(String(rawCountry));
       }
@@ -167,7 +167,7 @@ function KycPage() {
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 maxLength={60}
-                placeholder="USA"
+                placeholder="Australia"
               />
             </div>
             <div className="space-y-2">

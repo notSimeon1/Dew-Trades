@@ -7,6 +7,19 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 
+function rolldownCompatPlugin(): import("vite").Plugin {
+  return {
+    name: "rolldown-to-rollup-compat",
+    configResolved(config) {
+      for (const env of Object.values(config.environments || {})) {
+        if (env.build?.rolldownOptions?.input && !env.build?.rollupOptions?.input) {
+          env.build.rollupOptions.input = env.build.rolldownOptions.input;
+        }
+      }
+    },
+  };
+}
+
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
 export default defineConfig({
@@ -14,6 +27,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
+    plugins: [mcpPlugin(), rolldownCompatPlugin()],
   },
 });
