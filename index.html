@@ -1,80 +1,12 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dew Trades — Institutional Prime Brokerage & Multi-Asset Execution</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="alternate icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      html,
-      body,
-      #root {
-        min-height: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        display: block;
-        background-color: #090a0e;
-        color: #f8fafc;
-      }
-      @keyframes dew-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
+    <title>Dew Trades</title>
   </head>
   <body>
-    <div id="root">
-      <div
-        style="
-          min-height: 100vh;
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: #090a0e;
-          color: #f8fafc;
-          font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, sans-serif;
-        "
-      >
-        <div style="text-align: center; padding: 24px">
-          <div
-            style="
-              width: 36px;
-              height: 36px;
-              border: 3px solid rgba(245, 158, 11, 0.2);
-              border-top-color: #f59e0b;
-              border-radius: 50%;
-              animation: dew-spin 0.75s linear infinite;
-              margin: 0 auto 16px;
-            "
-          ></div>
-          <div
-            style="
-              font-size: 13px;
-              font-weight: 700;
-              letter-spacing: 0.08em;
-              color: #fbbf24;
-              text-transform: uppercase;
-            "
-          >
-            Loading Dew Trades Terminal...
-          </div>
-          <div style="font-size: 11px; color: #71717a; margin-top: 6px">
-            Connecting to liquidity network
-          </div>
-        </div>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

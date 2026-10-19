@@ -157,7 +157,7 @@ async function updateProfileBalance(
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export async function assertOwner(userId: string) {
   if (!userId || !UUID_REGEX.test(userId)) {

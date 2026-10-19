@@ -96,7 +96,7 @@ import { computeEnrichedCryptoAssets, CRYPTO_FALLBACK_PRICES } from "@/lib/crypt
 
 const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 function safeOpenUrl(url: string) {
   if (!url) return;
