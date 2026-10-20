@@ -159,7 +159,6 @@
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    will-change: transform, opacity;
   }
   body {
     background-color: var(--color-background);
@@ -169,7 +168,6 @@
     background-attachment: fixed;
     text-rendering: optimizeLegibility;
     overscroll-behavior-y: none;
-    content-visibility: auto;
   }
   button, a, input, select {
     touch-action: manipulation;

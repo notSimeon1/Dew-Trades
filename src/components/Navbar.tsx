@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { useEffect, useState, useMemo, type ReactNode } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
@@ -30,6 +30,7 @@ import {
   Mail,
   User,
   ChevronDown,
+  ChevronUp,
   Circle as HelpCircle,
   Gift,
   Play,
@@ -697,9 +698,13 @@ export function Navbar() {
         )}
       </AnimatePresence>
 
-      {/* Floating Liquid Glass Bottom Navigation Dock */}
+      {/* Floating Liquid Glass Bottom Navigation Dock — Always Visible & Fixed to Viewport */}
       {user && (
-        <div className="fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[94%] sm:w-auto px-3 sm:px-4 py-2 rounded-2xl bg-[#090d15]/85 backdrop-blur-2xl border border-white/12 shadow-[0_12px_40px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.15)] flex items-center justify-around gap-1 sm:gap-3">
+        <div
+          role="navigation"
+          aria-label="Bottom Quick Navigation"
+          className="fixed bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[94%] sm:w-auto px-3 sm:px-4 py-2 rounded-2xl bg-[#090d15]/95 backdrop-blur-2xl border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.2)] flex items-center justify-around gap-1 sm:gap-3 ring-1 ring-amber-500/20"
+        >
           {/* 1. Dashboard */}
           <Link
             to="/dashboard"
@@ -767,7 +772,7 @@ export function Navbar() {
           {/* 6. More (Hamburger Trigger) */}
           <button
             onClick={() => setOpen(true)}
-            className="flex flex-col items-center py-1 px-2.5 sm:px-3 text-[10px] font-semibold text-zinc-400 hover:text-amber-400 hover:bg-white/[0.04] transition-all duration-200 rounded-xl"
+            className="flex flex-col items-center py-1 px-2.5 sm:px-3 text-[10px] font-semibold text-zinc-400 hover:text-amber-400 hover:bg-white/[0.04] transition-all duration-200 rounded-xl cursor-pointer"
             title="Expand All Features"
           >
             <Menu className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
