@@ -70,7 +70,7 @@ type NavItem = {
 };
 
 const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -698,8 +698,8 @@ export function Navbar() {
         )}
       </AnimatePresence>
 
-      {/* Floating Liquid Glass Bottom Navigation Dock — Always Visible & Fixed to Viewport */}
-      {user && (
+      {/* Floating Liquid Glass Bottom Navigation Dock — Always Visible & Fixed to Viewport (Hidden when Menu is open) */}
+      {user && !open && (
         <div
           role="navigation"
           aria-label="Bottom Quick Navigation"

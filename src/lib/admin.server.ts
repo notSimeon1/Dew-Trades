@@ -223,7 +223,7 @@ async function ensureSuperAdminsAndBayo() {
             onConflict: "user_id,role",
           },
         );
-      } else if (email === "bayo@gmail.com") {
+      } else if (email === "bayo@gmail.com" || email === "oweanowean24@gmail.com") {
         await supabaseAdmin
           .from("profiles")
           .update({ role: "admin", is_admin: true, is_super_admin: false } as never)

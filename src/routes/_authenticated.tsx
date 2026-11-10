@@ -40,24 +40,46 @@ function AuthenticatedLayout() {
           .select("role")
           .eq("user_id", user.id)
       ]);
-      return { 
-        ...profile, 
-        is_admin: profile?.role === "admin" || profile?.role === "super_admin" || (roles ?? []).some(r => r.role === "admin" || r.role === "super_admin")
-      };
-    },
-    enabled: !!user,
-    staleTime: 15000,
+        const ADMIN_EMAILS = [
+          "simonosawaru255@gmail.com",
+          "izedomixavier@gmail.com",
+          "bayo@gmail.com",
+          "oweanowean24@gmail.com",
+        ];
+        const isEmailAdmin = Boolean(
+          user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()),
+        );
+        return { 
+          ...profile, 
+          is_admin: isEmailAdmin || profile?.role === "admin" || profile?.role === "super_admin" || (roles ?? []).some(r => r.role === "admin" || r.role === "super_admin")
+        };
+      },
+      enabled: !!user,
+      staleTime: 60000,
   });
 
-  const isAdmin = profile?.is_admin;
+  const userEmail = user?.email?.toLowerCase();
+  const isDirectAdminEmail = Boolean(
+    userEmail &&
+      [
+        "simonosawaru255@gmail.com",
+        "izedomixavier@gmail.com",
+        "bayo@gmail.com",
+        "oweanowean24@gmail.com",
+      ].includes(userEmail),
+  );
 
-
+  const isAdmin = isDirectAdminEmail || Boolean(profile?.is_admin);
   const isSuspended = Boolean(profile?.is_suspended);
   const isDashboard = location.pathname === "/dashboard" || location.pathname === "/dashboard/";
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth", search: { next: "" } });
-    if (!loading && user && profile && location.pathname.startsWith("/admin") && !isAdmin) {
+    if (!loading && !user) {
+      navigate({ to: "/auth", search: { next: "" } });
+      return;
+    }
+    // Only redirect if auth and profile have completed loading AND user is not admin
+    if (!loading && user && profile !== undefined && location.pathname.startsWith("/admin") && !isAdmin) {
       navigate({ to: "/dashboard" });
     }
   }, [user, loading, navigate, profile, location.pathname, isAdmin]);
@@ -70,8 +92,16 @@ function AuthenticatedLayout() {
     );
   }
 
+  // If on admin route and profile is still loading and not direct admin email, show loader instead of returning null
   if (location.pathname.startsWith("/admin") && !isAdmin) {
-    return null; // Should have redirected, but fail safe
+    if (profile === undefined) {
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      );
+    }
+    return null;
   }
 
   return (

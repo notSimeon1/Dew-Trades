@@ -44,6 +44,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Loader as Loader2,
   Shield,
@@ -127,7 +128,12 @@ function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const fetchOverview = useServerFn(getAdminOverview);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    const email = user?.email?.toLowerCase();
+    if (email && ADMIN_EMAILS.includes(email)) return true;
+    return null;
+  });
+  const [activeTab, setActiveTab] = useState("deposits");
 
   const BINANCE_PRICE_SYMBOLS = useMemo(
     () => [
@@ -197,8 +203,32 @@ function AdminPage() {
 
   if (isAdmin === null) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-11 w-11 rounded-xl" />
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-56" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+          </div>
+          <Skeleton className="h-9 w-32 rounded-lg" />
+        </div>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2 p-1.5 bg-muted/40 rounded-lg">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-24 rounded-md" />
+            ))}
+          </div>
+          <Card className="p-6 space-y-4">
+            <Skeleton className="h-6 w-44" />
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-xl" />
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -272,7 +302,7 @@ function AdminPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="deposits">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap h-auto gap-1.5 p-1.5 bg-muted/50 w-full justify-start">
           <TabsTrigger value="deposits" className="shrink-0">
             Deposits
@@ -344,106 +374,152 @@ function AdminPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="deposits">
-          <DepositsTab
-            items={overviewQuery.data?.deposits}
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-            tickers={tickers}
-          />
-        </TabsContent>
-        <TabsContent value="proofs">
-          <DepositProofsTab
-            items={overviewQuery.data?.deposits}
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-            tickers={tickers}
-          />
-        </TabsContent>
-        <TabsContent value="withdrawals">
-          <WithdrawalsTab
-            items={overviewQuery.data?.withdrawals}
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-            tickers={tickers}
-          />
-        </TabsContent>
-        <TabsContent value="wallets">
-          <AdminWalletsTab
-            walletItems={overviewQuery.data?.settings}
-            bankMethods={overviewQuery.data?.bankMethods}
-            walletsLoading={overviewQuery.isLoading}
-            refetchWallets={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="users">
-          <UsersTab
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-            tickers={tickers}
-          />
-        </TabsContent>
-        <TabsContent value="kyc">
-          <KycTab
-            items={overviewQuery.data?.kyc}
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="news">
-          <NewsTab
-            items={overviewQuery.data?.news}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="complaints">
-          <ComplaintsTab
-            items={overviewQuery.data?.complaints}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="settings">
-          <SettingsTab
-            walletItems={overviewQuery.data?.settings}
-            walletsLoading={overviewQuery.isLoading}
-            refetchWallets={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="bots">
-          <AdminBotsTab />
-        </TabsContent>
-        <TabsContent value="copy">
-          <AdminCopyTab />
-        </TabsContent>
-        <TabsContent value="premarket">
-          <AdminPreMarketTab tickers={tickers} />
-        </TabsContent>
-        <TabsContent value="announcements">
-          <AdminAnnouncementsTab />
-        </TabsContent>
-        <TabsContent value="signals">
-          <AdminSignalsTab tickers={tickers} />
-        </TabsContent>
-        <TabsContent value="support">
-          <AdminSupportTab users={overviewQuery.data?.users} />
-        </TabsContent>
-        <TabsContent value="roles">
-          <AdminRolesTab
-            users={overviewQuery.data?.users}
-            loading={overviewQuery.isLoading}
-            refetch={overviewQuery.refetch}
-          />
-        </TabsContent>
-        <TabsContent value="audit">
-          <AdminAuditTab users={overviewQuery.data?.users} />
-        </TabsContent>
+        <div className="relative min-h-[380px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              {overviewQuery.isLoading && (
+                <div className="space-y-4 pt-1">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-48 rounded-md" />
+                    <Skeleton className="h-8 w-28 rounded-md" />
+                  </div>
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <TabsContent value="deposits" className="mt-0">
+                {activeTab === "deposits" && (
+                  <DepositsTab
+                    items={overviewQuery.data?.deposits}
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                    tickers={tickers}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="proofs" className="mt-0">
+                {activeTab === "proofs" && (
+                  <DepositProofsTab
+                    items={overviewQuery.data?.deposits}
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                    tickers={tickers}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="withdrawals" className="mt-0">
+                {activeTab === "withdrawals" && (
+                  <WithdrawalsTab
+                    items={overviewQuery.data?.withdrawals}
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                    tickers={tickers}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="wallets" className="mt-0">
+                {activeTab === "wallets" && (
+                  <AdminWalletsTab
+                    walletItems={overviewQuery.data?.settings}
+                    bankMethods={overviewQuery.data?.bankMethods}
+                    walletsLoading={overviewQuery.isLoading}
+                    refetchWallets={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="users" className="mt-0">
+                {activeTab === "users" && (
+                  <UsersTab
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                    tickers={tickers}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="kyc" className="mt-0">
+                {activeTab === "kyc" && (
+                  <KycTab
+                    items={overviewQuery.data?.kyc}
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="news" className="mt-0">
+                {activeTab === "news" && (
+                  <NewsTab
+                    items={overviewQuery.data?.news}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="complaints" className="mt-0">
+                {activeTab === "complaints" && (
+                  <ComplaintsTab
+                    items={overviewQuery.data?.complaints}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="settings" className="mt-0">
+                {activeTab === "settings" && (
+                  <SettingsTab
+                    walletItems={overviewQuery.data?.settings}
+                    walletsLoading={overviewQuery.isLoading}
+                    refetchWallets={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="bots" className="mt-0">
+                {activeTab === "bots" && <AdminBotsTab />}
+              </TabsContent>
+              <TabsContent value="copy" className="mt-0">
+                {activeTab === "copy" && <AdminCopyTab />}
+              </TabsContent>
+              <TabsContent value="premarket" className="mt-0">
+                {activeTab === "premarket" && <AdminPreMarketTab tickers={tickers} />}
+              </TabsContent>
+              <TabsContent value="announcements" className="mt-0">
+                {activeTab === "announcements" && <AdminAnnouncementsTab />}
+              </TabsContent>
+              <TabsContent value="signals" className="mt-0">
+                {activeTab === "signals" && <AdminSignalsTab tickers={tickers} />}
+              </TabsContent>
+              <TabsContent value="support" className="mt-0">
+                {activeTab === "support" && <AdminSupportTab users={overviewQuery.data?.users} />}
+              </TabsContent>
+              <TabsContent value="roles" className="mt-0">
+                {activeTab === "roles" && (
+                  <AdminRolesTab
+                    users={overviewQuery.data?.users}
+                    loading={overviewQuery.isLoading}
+                    refetch={overviewQuery.refetch}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="audit" className="mt-0">
+                {activeTab === "audit" && <AdminAuditTab users={overviewQuery.data?.users} />}
+              </TabsContent>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </Tabs>
     </motion.div>
   );

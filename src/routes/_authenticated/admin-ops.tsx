@@ -42,7 +42,7 @@ import { clearAllAdminBalances } from "@/lib/admin.functions";
 
 const SUPER_ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com"];
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "izedomixavier@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin-ops")({
   component: AdminOpsPage,
@@ -52,7 +52,11 @@ export const Route = createFileRoute("/_authenticated/admin-ops")({
 function AdminOpsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    const email = user?.email?.toLowerCase();
+    if (email && ADMIN_EMAILS.includes(email)) return true;
+    return null;
+  });
 
   useEffect(() => {
     if (!user) return;
