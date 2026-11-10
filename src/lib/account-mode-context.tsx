@@ -177,7 +177,8 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
   // Hook into TanStack Query Cache to automatically sync balances when related queries invalidate
   useEffect(() => {
     const unsubscribe = qc.getQueryCache().subscribe((event) => {
-      if (event?.type === "updated" || event?.type === "invalidated") {
+      const eventType = event?.type as string;
+      if (eventType === "updated" || eventType === "invalidated") {
         const key = event.query?.queryKey?.[0];
         if (
           key === "profile" ||

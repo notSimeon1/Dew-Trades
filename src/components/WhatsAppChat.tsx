@@ -462,12 +462,13 @@ export function WhatsAppChat({
                       {isMine && (
                         <span>
                           {m.is_read ? (
-                            <CheckCheck
-                              className="h-3.5 w-3.5 text-sky-400 font-bold"
-                              title="Read by recipient"
-                            />
+                            <span title="Read by recipient">
+                              <CheckCheck className="h-3.5 w-3.5 text-sky-400 font-bold" />
+                            </span>
                           ) : (
-                            <CheckCheck className="h-3.5 w-3.5 text-slate-400" title="Delivered" />
+                            <span title="Delivered">
+                              <CheckCheck className="h-3.5 w-3.5 text-slate-400" />
+                            </span>
                           )}
                         </span>
                       )}

@@ -89,7 +89,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useBinancePrices, fetchBinanceLiveCandles, type Ticker } from "@/hooks/useBinancePrices";
 import { TradingChart, type Candle } from "@/components/TradingChart";
 import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine";

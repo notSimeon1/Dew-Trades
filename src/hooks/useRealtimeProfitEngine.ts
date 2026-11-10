@@ -52,14 +52,16 @@ export function useRealtimeProfitEngine() {
 
           // Only sync to DB if profit has grown by at least $0.50 since last DB write
           if (Math.abs(computedProfit - currentStored) >= 0.5) {
-            return supabase
-              .from("user_active_bots")
-              .update({
-                profit_accumulated: computedProfit,
-              } as never)
-              .eq("id", bot.id)
-              .then(() => {})
-              .catch(() => {});
+            try {
+              await supabase
+                .from("user_active_bots")
+                .update({
+                  profit_accumulated: computedProfit,
+                } as never)
+                .eq("id", bot.id);
+            } catch {
+              /* ignore update error */
+            }
           }
         });
 
@@ -69,14 +71,16 @@ export function useRealtimeProfitEngine() {
           const currentStored = Number(alloc.total_profit ?? 0);
 
           if (Math.abs(computedProfit - currentStored) >= 0.5) {
-            return supabase
-              .from("user_copy_allocations")
-              .update({
-                total_profit: computedProfit,
-              } as never)
-              .eq("id", alloc.id)
-              .then(() => {})
-              .catch(() => {});
+            try {
+              await supabase
+                .from("user_copy_allocations")
+                .update({
+                  total_profit: computedProfit,
+                } as never)
+                .eq("id", alloc.id);
+            } catch {
+              /* ignore update error */
+            }
           }
         });
 

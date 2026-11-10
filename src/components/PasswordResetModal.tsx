@@ -73,9 +73,9 @@ export function PasswordResetModal({
     setLoading(true);
     try {
       // Call public RPC to get security questions for given email
-      const { data, error } = await supabase.rpc("get_user_security_questions", {
+      const { data, error } = (await supabase.rpc("get_user_security_questions", {
         p_email: email.trim(),
-      });
+      })) as { data: any; error: any };
 
       if (error) {
         // Fallback or handle direct table query via server edge
@@ -115,12 +115,15 @@ export function PasswordResetModal({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc("verify_security_answers_and_reset_password", {
-        p_email: email.trim(),
-        p_ans1: ans1.trim(),
-        p_ans2: ans2.trim(),
-        p_new_password: newPassword,
-      });
+      const { data, error } = (await (supabase.rpc as any)(
+        "verify_security_answers_and_reset_password",
+        {
+          p_email: email.trim(),
+          p_ans1: ans1.trim(),
+          p_ans2: ans2.trim(),
+          p_new_password: newPassword,
+        },
+      )) as { data: any; error: any };
 
       if (error) throw error;
 
