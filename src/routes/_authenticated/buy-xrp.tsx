@@ -151,7 +151,7 @@ type Stage = "select" | "generating" | "details";
 
 const DEFAULT_EXPIRY_SECONDS = 7200; // 2 hours
 const DEFAULT_GAS_FEE_PCT = 0.02; // 2% special discount for XRP purchases!
-const DEFAULT_MIN_DEPOSIT = 30; // lower minimum for XRP
+const DEFAULT_MIN_DEPOSIT = 10;
 
 function WizardSteps({ stage }: { stage: Stage }) {
   const steps = [

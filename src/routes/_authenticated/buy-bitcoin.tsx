@@ -117,7 +117,7 @@ const FALLBACK_METHODS: PaymentMethod[] = [
 
 // Static fallbacks — overridden by platform_settings at runtime
 const DEFAULT_GAS_FEE_PCT = 0.03;
-const DEFAULT_MIN_DEPOSIT = 50;
+const DEFAULT_MIN_DEPOSIT = 10;
 const DEFAULT_EXPIRY_SECONDS = 2 * 60 * 60;
 
 // Step header

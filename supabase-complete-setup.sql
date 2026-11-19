@@ -823,7 +823,7 @@ CREATE POLICY "receipts_auth_insert" ON storage.objects FOR INSERT TO authentica
 
 -- 7.1 Platform Settings
 INSERT INTO public.platform_settings (category, key_name, value, description) VALUES
-  ('financial', 'min_deposit_usd',          '50',       'Minimum deposit amount (USD)'),
+  ('financial', 'min_deposit_usd',          '10',       'Minimum deposit amount (USD)'),
   ('financial', 'max_deposit_usd',          '500000',   'Maximum single deposit amount (USD)'),
   ('financial', 'min_withdrawal_usd',       '50',       'Minimum withdrawal amount (USD)'),
   ('financial', 'max_withdrawal_usd',       '100000',   'Maximum single withdrawal amount (USD)'),

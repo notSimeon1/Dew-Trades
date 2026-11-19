@@ -332,7 +332,7 @@ function DepositPage() {
   }, [cumulativeDeposits]);
 
   const gasFeePercent = Number(platformSettings?.gas_fee_percent ?? 5);
-  const minDeposit = Number(platformSettings?.min_deposit_usd ?? 50);
+  const minDeposit = Number(platformSettings?.min_deposit_usd ?? 10);
   const expiryHours = Number(platformSettings?.payment_order_expiry_hours ?? 2);
 
   const baseAmount = Number(amount) || 0;
